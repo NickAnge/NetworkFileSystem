@@ -1,0 +1,22 @@
+API
+
+1)[] Init
+2)[] open
+3)[] read
+4)[] write
+5)[] seek
+6)[] close
+
+Request-reply Protocol
+
+1) [] Choose request-reply protocol
+2) [] what acks we must send to achieve at least once semantics
+
+
+Functionalities
+
+1)[] Εντοπισμός/δημιουργεία ενος αρχείου και λήψη του εσωτερικού αναγνωριστικού
+2)[] διάβασμα δεδομένων απο αρχείο με βάση το αναγνωριστικό  του
+3)[] Γράψιμο δεδομένων σε αρχείο με βάση το αναγνωριστικό του
+
+
