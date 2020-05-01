@@ -1,7 +1,20 @@
+BUFFERS
+Client
+[x] Server Info
+[x] cacheMemory info
+[x] UdpMessage Buffer write,read,open
+
+Server
+
+
 API
 
-1)[] Init
+1)[x] Init
+    [x] ServerInfo(ipAddr,port)
+    [x] cacheMemoryInfo()
 2)[] open
+    [x] flags O_CREAT...
+    []
 3)[] read
 4)[] write
 5)[] seek
@@ -10,12 +23,14 @@ API
 Request-reply Protocol
 
 1) [] Choose request-reply protocol
-2) [] what acks we must send to achieve at least once semantics
-
+    [x] Duplicates client side
+    [] Remove ids from Buffers
+    [] Resend until receive
 
 Functionalities
-
 1)[] Εντοπισμός/δημιουργεία ενος αρχείου και λήψη του εσωτερικού αναγνωριστικού
+   --> Directory Service
+         [] lookup
 2)[] διάβασμα δεδομένων απο αρχείο με βάση το αναγνωριστικό  του
 3)[] Γράψιμο δεδομένων σε αρχείο με βάση το αναγνωριστικό του
 
