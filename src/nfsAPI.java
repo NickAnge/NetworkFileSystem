@@ -1,3 +1,6 @@
+import java.util.EnumSet;
+
+
 public interface nfsAPI {
     public static final int O_CREAT = 1; // if file does not exist create it
     public static final int O_EXCL = 2; // if file exists return error with EEXIT
@@ -10,7 +13,7 @@ public interface nfsAPI {
 
 
     int myNfs_init(String ipaddr,int port,int cacheBlocks,int blockSize,int freshT);
-    int myNfs_open(String fName,int flags);
+    int myNfs_open(String fName,EnumSet<Flag>  flags);
     int myNfs_read(int fd, String buff,int n);
     int myNfs_write(int fd,String buff ,int n);
     int myNfs_seek(int fd ,int pos , int whence);
