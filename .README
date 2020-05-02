@@ -3,18 +3,27 @@ Client
 [x] Server Info
 [x] cacheMemory info
 [x] UdpMessage Buffer write,read,open
-
-Server
-
+[x] fileDescriptor info
 
 API
 
 1)[x] Init
     [x] ServerInfo(ipAddr,port)
     [x] cacheMemoryInfo()
-2)[] open
+2)[] open --> Open a file and return a file descriptor
     [x] flags O_CREAT...
-    []
+    [x] Sending packets until specific  id has been added to the idsMiddleware
+    [-] Store the fd with this pathname?
+    [x] Store info for this file descriptor
+        [x] starting postiong
+        [x] fd communicates with server
+    [] Pass flag arguments to the server
+        [x] O_CREAT --> create the file if its not exist
+        [] O_EXCL --> together with o_crate return error if file exists
+        [] O_TRUNC -->  if file exists and is a regular file and the acess mode allows writing will be truncated to length 0
+        [x] O_RDONLY
+        [x] O_RDWR
+        [x] O_WRONLY
 3)[] read
 4)[] write
 5)[] seek
@@ -24,14 +33,28 @@ Request-reply Protocol
 
 1) [] Choose request-reply protocol
     [x] Duplicates client side
+        [x] idsMiddleware Buffer
     [] Remove ids from Buffers
-    [] Resend until receive
+    [x] Resend until receive
 
 Functionalities
 1)[] Εντοπισμός/δημιουργεία ενος αρχείου και λήψη του εσωτερικού αναγνωριστικού
-   --> Directory Service
-         [] lookup
+       [x] send information to server(fname,flags)
+       [] server receive the request and prepares an integer id for the fname;
+            [] gives an id to each file based on the creation time
+            []
+       [x] client-middleware receives the packet and
+            [x] stores the id value of the request
+            [x] create fileDescriptor for this value and returns openInt to app(specific for each app because is given from the client middleware)
+
 2)[] διάβασμα δεδομένων απο αρχείο με βάση το αναγνωριστικό  του
 3)[] Γράψιμο δεδομένων σε αρχείο με βάση το αναγνωριστικό του
+
+
+Server
+[]
+[x] init of a directory args
+[] sort directory files
+     This will be protection if the server crashes
 
 
