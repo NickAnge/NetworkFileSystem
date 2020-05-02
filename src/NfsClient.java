@@ -1,8 +1,6 @@
 import javax.xml.crypto.Data;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.io.*;
+import java.net.*;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -18,6 +16,15 @@ public class NfsClient implements   nfsAPI{
     private DatagramSocket udpSocket;
     private CacheMemory cacheMemory;
     private HashMap<String, ArrayList<Integer> > idsMiddleware;
+    private HashMap<Integer,udpMessage> openMsgs;
+    private HashMap<Integer,udpMessage> readMsgs;
+    private HashMap<Integer,udpMessage> writeMsgs;
+    private Thread clientThread;
+
+
+    //information middleware about file descriptors
+    private HashMap<Integer,fileDescriptor>  middlewarefds;
+
 
     public NfsClient() {
         this.readInt = this.openInt = this.writeInt = -1; //  integers for duplicates
@@ -28,17 +35,25 @@ public class NfsClient implements   nfsAPI{
         this.idsMiddleware.put(read,readList);
         ArrayList<Integer> writeList = new ArrayList<>();
         this.idsMiddleware.put(write,writeList);
+        //init buffers for open/read/write that the  middleware takes
+        this.openMsgs = new HashMap<>();
+        this.readMsgs = new HashMap<>();
+        this.writeMsgs = new HashMap<>();
+        this.middlewarefds = new HashMap<>();
+        clientThread = new Thread(new clientReceive());
 
 
     }
 
-    //TODO init communication information(structure for server information) with server and information of cache(structure)
     @Override
     public int myNfs_init(String ipaddr, int port, int cacheBlocks, int blockSize, int freshT) {
         try {
             this.server = new ServerInfo(InetAddress.getByName(ipaddr),port);
+            System.out.println(server.getServerIp());
             this.udpSocket = new DatagramSocket();
             this.cacheMemory = new CacheMemory(cacheBlocks, blockSize,freshT);
+            clientThread.start();
+
         } catch (UnknownHostException | SocketException e) {
             e.printStackTrace();
         }
@@ -49,15 +64,11 @@ public class NfsClient implements   nfsAPI{
     @Override
     public int myNfs_open(String fName, EnumSet<Flag> flags) {
 
-//        System.out.println("Flags"+ flags);
-//        create_look("takhs",O_CREAT | );
+        openInt++;
+        udpMessageOpen openPacket = new udpMessageOpen(open,openInt,-1,fName,flags);
+        sendUdpMessage(openPacket,openInt);
 
-        if (flags.contains(Flag.O_CREAT)) {
-            System.out.println("CREATE");
-        }
-
-
-        return 0;
+        return openInt;
     }
 
     @Override
@@ -84,24 +95,88 @@ public class NfsClient implements   nfsAPI{
     public void create_look(String filename, int flags){
 
     }
-    //This function will check every time if we have received the message
-    public  int checkDuplicates(int fileId,String type){
-        boolean check = this.idsMiddleware.get(type).contains(fileId);
-        if(check){
-            return 1; // already received
+
+    public void sendUdpMessage(udpMessage msg,int clientId){
+
+        udpMessage msg2 = null;
+        ObjectOutputStream oos = null;
+        try {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        oos = new ObjectOutputStream(baos);
+        oos.writeObject(msg);
+        byte[] byteMsg = baos.toByteArray();
+        DatagramPacket packet = new DatagramPacket(byteMsg, byteMsg.length,server.getServerIp(), server.port);
+
+        while(!idsMiddleware.get(msg.getType()).contains(clientId)){
+            //resend packet until server answer
+            udpSocket.send(packet);
+
         }
-        return 0;//failure.
-    }
-    public void receiveUdpMessages() {
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
-
     }
-    //Thread of Middleware
-    class client extends  Thread {
+    public udpMessage receiveUdpMessages() {
+        byte[] buffer = new byte[1024];
+        try {
+            System.out.println(server.getServerIp());
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, server.getServerIp(), server.getPort());
+            udpSocket.setSoTimeout(1);
+            udpSocket.receive(packet);
+            System.out.println(packet.getLength());
+            ByteArrayInputStream baos = new ByteArrayInputStream(buffer);
+            ObjectInputStream oos = new ObjectInputStream(baos);
+            udpMessage receiveMessage = (udpMessage) oos.readObject();
+            System.out.println("ELAVA" + receiveMessage.getType());
+
+            return receiveMessage;
+        } catch (IOException | ClassNotFoundException e) {
+//            e.printStackTrace();
+            return null;
+        }
+    }
+//    }
+
+        //Thread of Middleware
+    class clientReceive extends  Thread {
         public void run() {
-
             while(true){
+                System.out.println("paw gia receive");
+                udpMessage receiveMessage = receiveUdpMessages();
 
+                if(receiveMessage != null){
+                    if(receiveMessage.getType().equals(open)){
+                        udpMessageOpen returnMsg = (udpMessageOpen) receiveMessage;
+                        if(!idsMiddleware.get(returnMsg.getType()).contains(returnMsg.getOpenClientInt())){
+                            System.out.println("Added open fd");
+                            idsMiddleware.get(returnMsg.getType()).add(returnMsg.getOpenClientInt());
+                            //informations that the the middleware holds and sends every time to server to read , like file descriptor
+
+                            fileDescriptor newfd = new fileDescriptor(returnMsg.getFd(),0);
+                            middlewarefds.put(returnMsg.getOpenClientInt(),newfd);
+
+                        }
+                        System.out.println("File descriptor from server : "+returnMsg.getFd());
+                        System.out.println("CLient id " + returnMsg.getOpenClientInt() );
+                    }
+                    if(receiveMessage.getType().equals(read)){
+                        udpMessageRead returnMsg = (udpMessageRead) receiveMessage;
+                        if(!idsMiddleware.get(returnMsg.getType()).contains(returnMsg.getReadClientInt())){
+                            System.out.println("Added read Client ID ");
+                            idsMiddleware.get(returnMsg).add(returnMsg.getReadClientInt());
+                        }
+                    }
+                    else if (receiveMessage.getType().equals(write)) {
+                        udpMessageWrite returnMsg = (udpMessageWrite) receiveMessage;
+                        if(!idsMiddleware.get(returnMsg.getType()).contains(returnMsg.getWriteClientInt())){
+                            System.out.println("Added write client ID");
+
+                            idsMiddleware.get(returnMsg).add(returnMsg.getWriteClientInt());
+
+                        }
+                    }
+                }
 
             }
 
