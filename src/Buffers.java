@@ -1,7 +1,9 @@
+import java.io.Serializable;
 import java.net.InetAddress;
 import java.util.EnumSet;
 
 public class Buffers {
+
 }
 
 //FLags for open api
@@ -10,6 +12,7 @@ enum  Flag {
 
     public static final EnumSet<Flag> ALL_OPTS = EnumSet.allOf(Flag.class);
 }
+
 
 //Informations about Server
 class ServerInfo {
@@ -74,20 +77,104 @@ class CacheMemory {
     }
 }
 
-class udpMessageOpen {
-    private static final String Type = "Open";
-    private String fileName;
-    private int clientId;
-    private int fd;
+class udpMessage implements Serializable {
+    private String Type;
 
-    public udpMessageOpen(String fileName, int clientId, int fd) {
-        this.fileName = fileName;
-        this.clientId = clientId;
+
+    public udpMessage(String type) {
+        Type = type;
+    }
+
+    public String getType() {
+        return Type;
+    }
+
+    public void setType(String type) {
+        Type = type;
+    }
+}
+
+class udpMessageRead extends udpMessage implements Serializable{
+    private double size;
+    private Msg readMsg;
+    private int readClientInt;
+    private fileDescriptor fd;
+
+
+    public udpMessageRead(String type, int readClientInt, fileDescriptor fd,Msg readMsg, double size) {
+        super(type);
+        this.size = size;
+        this.readClientInt = readClientInt;
+        this.fd = fd;
+        this.readMsg = readMsg;
+    }
+
+    public Msg getReadMsg() {
+        return readMsg;
+    }
+
+    public void setReadMsg(Msg readMsg) {
+        this.readMsg = readMsg;
+    }
+
+    public int getReadClientInt() {
+        return readClientInt;
+    }
+
+    public void setReadClientInt(int readClientInt) {
+        this.readClientInt = readClientInt;
+    }
+
+    public fileDescriptor getFd() {
+        return fd;
+    }
+
+    public void setFd(fileDescriptor fd) {
         this.fd = fd;
     }
 
-    public static String getType() {
-        return Type;
+    public double getSize() {
+        return size;
+    }
+
+    public void setSize(double size) {
+        this.size = size;
+    }
+}
+class udpMessageOpen extends udpMessage implements Serializable{
+    private String fileName;
+    private EnumSet<Flag> flags; // informations about open of this file
+    private int  fd;
+    private int openClientInt;
+
+    public udpMessageOpen(String type, int clientId, int fd, String fileName, EnumSet<Flag> flags) {
+        super(type);
+        this.fileName = fileName;
+        this.fd = fd;
+        this.openClientInt = clientId;
+        this.flags = flags;
+    }
+
+    public udpMessageOpen(String type, int fd, int openClientInt) {
+        super(type);
+        this.fd = fd;
+        this.openClientInt = openClientInt;
+    }
+
+    public int getFd() {
+        return fd;
+    }
+
+    public void setFd(int fd) {
+        this.fd = fd;
+    }
+
+    public int getOpenClientInt() {
+        return openClientInt;
+    }
+
+    public void setOpenClientInt(int openClientInt) {
+        this.openClientInt = openClientInt;
     }
 
     public String getFileName() {
@@ -98,45 +185,27 @@ class udpMessageOpen {
         this.fileName = fileName;
     }
 
-    public int getClientId() {
-        return clientId;
+    public EnumSet<Flag> getFlags() {
+        return flags;
     }
 
-    public void setClientId(int clientId) {
-        this.clientId = clientId;
-    }
-
-    public int getFd() {
-        return fd;
-    }
-
-    public void setFd(int fd) {
-        this.fd = fd;
+    public void setFlags(EnumSet<Flag> flags) {
+        this.flags = flags;
     }
 }
-
-class udpMessageRead {
-    private static final String Type = "Read";
-    private int fd;
+class udpMessageWrite extends udpMessage implements Serializable {
     private double size;
-    private int clientId;
+    private Msg writeMsg;
+    private int writeClientInt;
+    private fileDescriptor fd;
 
-    public udpMessageRead(int fd, double size, int clientId) {
-        this.fd = fd;
+
+    public udpMessageWrite(String type, int clientId, fileDescriptor fd, double size, Msg writeMsg) {
+        super(type);
         this.size = size;
-        this.clientId = clientId;
-    }
-
-    public static String getType() {
-        return Type;
-    }
-
-    public int getFd() {
-        return fd;
-    }
-
-    public void setFd(int fd) {
+        this.writeClientInt = clientId;
         this.fd = fd;
+        this.writeMsg = writeMsg;
     }
 
     public double getSize() {
@@ -147,29 +216,47 @@ class udpMessageRead {
         this.size = size;
     }
 
-    public int getClientId() {
-        return clientId;
+    public Msg getWriteMsg() {
+        return writeMsg;
     }
 
-    public void setClientId(int clientId) {
-        this.clientId = clientId;
+    public void setWriteMsg(Msg writeMsg) {
+        this.writeMsg = writeMsg;
+    }
+
+    public int getWriteClientInt() {
+        return writeClientInt;
+    }
+
+    public void setWriteClientInt(int writeClientInt) {
+        this.writeClientInt = writeClientInt;
+    }
+
+    public fileDescriptor getFd() {
+        return fd;
+    }
+
+    public void setFd(fileDescriptor fd) {
+        this.fd = fd;
     }
 }
 
-class udpMessageWrite {
-    private static final String Type = "Write";
-    private int fd;
-    private double size;
-    private int clientId;
+class Msg implements  Serializable{
+    String msg;
 
-    public udpMessageWrite(int fd, double size, int clientId) {
-        this.fd = fd;
-        this.size = size;
-        this.clientId = clientId;
+    public Msg(String msg) {
+        this.msg = msg;
     }
+}
 
-    public static String getType() {
-        return Type;
+//contains the information about each file descriptor
+class fileDescriptor {
+    private int fd;
+    private int posFromStart;
+
+    public fileDescriptor(int fd, int posFromStart) {
+        this.fd = fd;
+        this.posFromStart = posFromStart;
     }
 
     public int getFd() {
@@ -180,19 +267,11 @@ class udpMessageWrite {
         this.fd = fd;
     }
 
-    public double getSize() {
-        return size;
+    public int getPosFromStart() {
+        return posFromStart;
     }
 
-    public void setSize(double size) {
-        this.size = size;
-    }
-
-    public int getClientId() {
-        return clientId;
-    }
-
-    public void setClientId(int clientId) {
-        this.clientId = clientId;
+    public void setPosFromStart(int posFromStart) {
+        this.posFromStart = posFromStart;
     }
 }
