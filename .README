@@ -5,29 +5,62 @@ Client
 [x] UdpMessage Buffer write,read,open
 [x] fileDescriptor info
 
+for incoming msgs from server(read,write,open)
+[] readMsgs
+  [] Delete them when application takes them
+[] writeMsgs
+  [] DElete them ...
+[] openMsgs
+  [] Delete them...
+
+for requests
+[x] requests
+  [x] Deletes them when we receive answer
+
+for duplication
+[] idsMiddleware(read,write,open)
+  [] Deletes them SOMEHOW **********
+
+for fds Information
+[x] filedescriptors
+  [x] Deletes them when application close them
+
 API
 
 1)[x] Init
     [x] ServerInfo(ipAddr,port)
     [x] cacheMemoryInfo()
-2)[] open --> Open a file and return a file descriptor
+2)[x] open --> Open a file and return a file descriptor
     [x] flags O_CREAT...
     [x] Sending packets until specific  id has been added to the idsMiddleware
     [-] Store the fd with this pathname?
     [x] Store info for this file descriptor
         [x] starting postiong
         [x] fd communicates with server
-    [] Pass flag arguments to the server
+    [x] Pass flag arguments to the server
         [x] O_CREAT --> create the file if its not exist
-        [] O_EXCL --> together with o_crate return error if file exists
-        [] O_TRUNC -->  if file exists and is a regular file and the acess mode allows writing will be truncated to length 0
+        [x] O_EXCL --> together with o_crate return error if file exists
+        [x] O_TRUNC -->  if file exists and is a regular file and the acess mode allows writing will be truncated to length 0
         [x] O_RDONLY
         [x] O_RDWR
         [x] O_WRONLY
+     [] if appplication unblock and his request is not proecessed -->> lock again
+     [x] if simple open , read and write flags;
+
 3)[] read
+     [x] send specific starting byte and receive next starting byte after read for this specific file descriptor
+     [] 2/more clients read at the smae file
+     [x] check file descriptor fields
+     [] if appplication unblock and his request is not proecessed -->> lock again
+     [x] must return the readMsg to application somehow;
+     [x] check if wanted read starting byte is too long
 4)[] write
 5)[] seek
+
+
 6)[] close
+      [x] Remove fd info from client
+      [] Remove from application this fd
 
 Request-reply Protocol
 
@@ -40,21 +73,36 @@ Request-reply Protocol
 Functionalities
 1)[] Εντοπισμός/δημιουργεία ενος αρχείου και λήψη του εσωτερικού αναγνωριστικού
        [x] send information to server(fname,flags)
-       [] server receive the request and prepares an integer id for the fname;
-            [] gives an id to each file based on the creation time
-            []
+       [x] server receive the request and prepares an integer id for the fname;
+            [x] gives an id to each file based on the creation time
+            [x] return an error -1 if (O_CREAT | O_EXCL)
+            [x] return error if requested flag is note permitted based on the file permissions
        [x] client-middleware receives the packet and
             [x] stores the id value of the request
+               [x] check for duplicates
             [x] create fileDescriptor for this value and returns openInt to app(specific for each app because is given from the client middleware)
-
+                [x] stores file descriptor to buffer(all information we want for readding, writing etc)
 2)[] διάβασμα δεδομένων απο αρχείο με βάση το αναγνωριστικό  του
+       [x] give an id for the request readInt
+       [x] create an udpMessageRead store it to request
+       [x] block until client process it
+       [x] client sends the packet until receive answer (at least once)
+       [x] when answer received
+            [x] client stores the id to midlewares id for duplicates
+            [x] client stores the new file descriptor(new starting point) into file descriptors buffer
+            [x] put the answer into readMsgs for App
+        []
+        .....
+
 3)[] Γράψιμο δεδομένων σε αρχείο με βάση το αναγνωριστικό του
 
 
 Server
 []
 [x] init of a directory args
-[] sort directory files
+[x] sort directory files
      This will be protection if the server crashes
+
+[] init a map that will match ids with fnames for easier searching
 
 
