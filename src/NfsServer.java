@@ -2,26 +2,35 @@ import javax.xml.crypto.Data;
 import java.awt.*;
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Objects;
+import java.util.*;
 
 public class NfsServer {
     public  static final String RED = "\033[0;31m";
     public static DatagramSocket serverSocket;
+    public static File directory;
+    public static final int O_CREAT = 1; // if file does not exist create it
+    public static final int O_EXCL = 2; // if file exists return error with EEXIT
+    public static final int O_TRUNC = 3; // delete file and recreate it
+    public static final int O_RDWR = 4; //READ and WRITE permission to the file
+    public static final int O_RDONLY = 5; // READ only permission
+    public static final int O_WRONLY = 6; // WRITE only permission
+    public static final int E_EXIST = -1; //error if file exists with O_EXCl
+    public  static final int ERROR = -2;
     public static void main(String[] args) {
+
+        HashMap<Integer,File> idsFIles = new HashMap<>();
 
         if (args.length == 0) {
             System.err.println(RED + "Give an argument that will be the server root directory");
             return;
         }
         System.out.println("Starting root directort is :" + args[0]);
-        File directory = new File(args[0]);
+        directory = new File(args[0]);
 
 
         //with this way all files will take
@@ -34,6 +43,11 @@ public class NfsServer {
             System.out.println(files.get(i));
         }
         printList(sortedFiles);
+        try {
+            System.out.println(InetAddress.getLocalHost());
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
 //        serverSocket = null;
 
         try {
@@ -65,44 +79,54 @@ public class NfsServer {
                 if(receiveMessage == null){
                     continue;
                 }
+
                 String type = checkMessageType(receiveMessage);
-                System.out.println("werwrqweS");
+
                 if (type.equals("Open")) {
                     System.out.println("New open request to Server");
                     udpMessageOpen openMsg = (udpMessageOpen) receiveMessage;
                     System.out.println("Request file name: " + openMsg.getFileName());
+
                     int nextId = -1;
-                    if(openMsg.getFlags().contains(Flag.O_CREAT) && openMsg.getFlags().contains(Flag.O_EXCL)) {
-                        System.out.println("CREATE AND EXCL");
+
+                    //check for flags
+                    nextId = fillAccessMode(openMsg,files);
+
+                    if(nextId >= 0){
+                        // this Hashmap will match ids with names for faster searching
+
+                        idsFIles.put(nextId,files.get(nextId));
                     }
-
-                    if(openMsg.getFlags().contains(Flag.O_CREAT)){
-                        File newFile = new File(directory+"/"+openMsg.getFileName());
-                        if(newFile.createNewFile()){
-                                if(openMsg.getFlags().contains(Flag.O_RDONLY)){
-                                    newFile.setReadOnly();
-                                }
-                                else if(openMsg.getFlags().contains(Flag.O_WRONLY)){
-                                    newFile.setWritable(true);
-                                }
-                                else if(openMsg.getFlags().contains(Flag.O_RDWR)) {
-                                    newFile.setWritable(true);
-                                    newFile.setReadable(true);
-                                }
-
-                                files.add(newFile);
-                                nextId = files.size() - 1;
-                        }
-                        else {
-                            nextId = returnIdFile(sortedFiles,openMsg.getFileName());
-                        }
-
-                    }
-
                     System.out.println(nextId);
-                    udpMessage serverAnswer = new udpMessageOpen("Open", nextId, openMsg.getOpenClientInt());
+                    udpMessage serverAnswer = new udpMessageOpen("Open", nextId, openMsg.getOpenClientInt(),openMsg.getFlags());
                     sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
-                    Thread.sleep(30000);
+//                    Thread.sleep(30000);
+                }
+                else if(type.equals("Read")){
+                    System.out.println("New read request to Server");
+
+                    udpMessageRead readMsg = (udpMessageRead) receiveMessage;
+
+                   if(!idsFIles.containsKey(readMsg.getFd().getFd())){
+                        File file = files.get(readMsg.getFd().getFd());
+                        idsFIles.put(readMsg.getFd().getFd(),file);
+                   }
+                   FileInputStream reading = new FileInputStream(idsFIles.get(readMsg.getFd().getFd()));
+
+                   reading.skip(readMsg.getFd().getPosFromStart());
+                   byte [] bytes = new byte[(int) readMsg.getSize()];
+                   int buff = reading.read(bytes,0,(int)readMsg.getSize());
+
+                   String s = new String(bytes, StandardCharsets.UTF_8);
+                   int len = readMsg.getFd().getPosFromStart() + (int)readMsg.getSize();
+                   readMsg.getFd().setPosFromStart(len);
+                   Msg msg = new Msg(s);
+                   udpMessageRead serverAnswer = new udpMessageRead("Read",msg,readMsg.getReadClientInt(),readMsg.getFd());
+                   sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
+
+
+                }
+                else if(type.equals("Write")){
 
                 }
 
@@ -111,13 +135,12 @@ public class NfsServer {
             } catch (IOException e) {
                 e.printStackTrace();
             } catch (ClassNotFoundException e) {
-                    e.printStackTrace();
-             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
 
     }
+
 
     public static File[] sortingFilesOfDirectory(File directory) {
         File[] files = directory.listFiles();
@@ -201,7 +224,7 @@ public class NfsServer {
         }
     }
 
-    public  static int returnIdFile(File[] files, String fname){
+    public  static int returnIdFile(ArrayList<File> files, String fname){
 
         int i =0;
         for(File file : files){
@@ -216,4 +239,123 @@ public class NfsServer {
     }
 
 
+    public static void checkOpenFlags(EnumSet<Flag> flags){
+
+
+    }
+
+    public static int fillAccessMode(udpMessageOpen openMsg,ArrayList<File> files){
+        int nextId = -2;
+//        int O_EXCL = -1;
+//        int O_TRUNC = -1;
+
+        if(openMsg.getFlags().contains(O_CREAT)) {
+            File newFile = new File(directory + "/" + openMsg.getFileName());
+            try {
+                if (openMsg.getFlags().contains(O_EXCL)) {
+                    //
+                    if (newFile.exists()) {
+                        //return error cause file exists
+                        nextId = E_EXIST;
+                        return nextId;
+                    }
+                }
+                if (openMsg.getFlags().contains(O_TRUNC)) {
+//                    O_TRUNC = 1;
+                    if (newFile.exists()) {
+                        if (newFile.canWrite()) {
+                            //delete contents and set fd to zero
+                            PrintWriter pw = new PrintWriter(newFile);
+                            pw.close();
+                        }
+                    }
+
+                }
+                if (newFile.createNewFile()) {
+                    if (openMsg.getFlags().contains(O_RDONLY)) {
+                        newFile.setReadOnly();
+                    } else if (openMsg.getFlags().contains(O_WRONLY)) {
+                        newFile.setReadable(false);
+                        newFile.setWritable(true);
+                    } else if (openMsg.getFlags().contains(O_RDWR)) {
+                        newFile.setWritable(true);
+                        newFile.setReadable(true);
+                    }
+
+                    files.add(newFile);
+                    nextId = files.size() - 1;
+                    return nextId;
+                } else {
+                    if (openMsg.getFlags().contains(O_RDONLY)) {
+                        if (newFile.canRead()) {
+                            nextId = returnIdFile(files, openMsg.getFileName());
+                            return nextId;
+                        } else {
+                            return ERROR;
+                        }
+                    } else if (openMsg.getFlags().contains(O_WRONLY)) {
+                        if (newFile.canWrite()) {
+                            System.out.println("mphka");
+                            nextId = returnIdFile(files, openMsg.getFileName());
+                            return nextId;
+                        }
+                        else {
+                            System.out.println("mphka error");
+                            return ERROR;
+                        }
+                    } else if (openMsg.getFlags().contains(O_RDWR)) {
+                        if (newFile.canRead() && newFile.canWrite()) {
+                            nextId = returnIdFile(files, openMsg.getFileName());
+                            return nextId;
+                        }
+                        else {
+                            return  ERROR;
+                        }
+                    }
+//                    return  nextId;
+                    nextId = returnIdFile(files, openMsg.getFileName());
+                    return nextId;
+                }
+            } catch(IOException e){
+                e.printStackTrace();
+            }
+        }
+        else {
+            File newFile = new File(directory + "/" + openMsg.getFileName());
+            if(newFile.exists()) {
+                if (openMsg.getFlags().contains(O_TRUNC)) {
+//                O_TRUNC = 1;
+                    if (newFile.exists()) {
+                        if (newFile.canWrite()) {
+                            //delete contents and set fd to zero
+                            PrintWriter pw = null;
+                            try {
+                                pw = new PrintWriter(newFile);
+                            } catch (FileNotFoundException e) {
+                                e.printStackTrace();
+                            }
+                            pw.close();
+                        }
+                    }
+                }
+                if (openMsg.getFlags().contains(O_RDONLY)) {
+                    if (newFile.canRead()) {
+                        nextId = returnIdFile(files, openMsg.getFileName());
+                        return nextId;
+                    }
+                } else if (openMsg.getFlags().contains(O_WRONLY)) {
+                    if (newFile.canWrite()) {
+                        nextId = returnIdFile(files, openMsg.getFileName());
+                        return nextId;
+                    }
+                } else if (openMsg.getFlags().contains(O_RDWR)) {
+                    if (newFile.canRead() && newFile.canWrite()) {
+                        nextId = returnIdFile(files, openMsg.getFileName());
+                        return nextId;
+                    }
+                }
+            }
+        }
+        return  nextId;
+    }
 }

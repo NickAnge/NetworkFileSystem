@@ -1,3 +1,4 @@
+import java.util.ArrayList;
 import java.util.EnumSet;
 
 
@@ -8,12 +9,13 @@ public interface nfsAPI {
     public static final int O_RDWR = 4; //READ and WRITE permission to the file
     public static final int O_RDONLY = 5; // READ only permission
     public static final int O_WRONLY = 6; // WRITE only permission
+    public static final int E_EXIST = -1; //error if file exists with O_EXCl
 
 
 
 
     int myNfs_init(String ipaddr,int port,int cacheBlocks,int blockSize,int freshT);
-    int myNfs_open(String fName,EnumSet<Flag>  flags);
+    int myNfs_open(String fName, ArrayList<Integer> flags);
     int myNfs_read(int fd, String buff,int n);
     int myNfs_write(int fd,String buff ,int n);
     int myNfs_seek(int fd ,int pos , int whence);

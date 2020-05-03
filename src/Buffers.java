@@ -1,5 +1,6 @@
 import java.io.Serializable;
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.EnumSet;
 
 public class Buffers {
@@ -109,6 +110,13 @@ class udpMessageRead extends udpMessage implements Serializable{
         this.readMsg = readMsg;
     }
 
+    public udpMessageRead(String type, Msg readMsg, int readClientInt, fileDescriptor fd) {
+        super(type);
+        this.readMsg = readMsg;
+        this.readClientInt = readClientInt;
+        this.fd = fd;
+    }
+
     public Msg getReadMsg() {
         return readMsg;
     }
@@ -143,11 +151,12 @@ class udpMessageRead extends udpMessage implements Serializable{
 }
 class udpMessageOpen extends udpMessage implements Serializable{
     private String fileName;
-    private EnumSet<Flag> flags; // informations about open of this file
+//    private EnumSet<Flag> flags; // informations about open of this file
+    private ArrayList<Integer> flags;
     private int  fd;
     private int openClientInt;
 
-    public udpMessageOpen(String type, int clientId, int fd, String fileName, EnumSet<Flag> flags) {
+    public udpMessageOpen(String type, int clientId, int fd, String fileName, ArrayList<Integer> flags) {
         super(type);
         this.fileName = fileName;
         this.fd = fd;
@@ -155,10 +164,11 @@ class udpMessageOpen extends udpMessage implements Serializable{
         this.flags = flags;
     }
 
-    public udpMessageOpen(String type, int fd, int openClientInt) {
+    public udpMessageOpen(String type, int fd, int openClientInt,ArrayList<Integer> flags) {
         super(type);
         this.fd = fd;
         this.openClientInt = openClientInt;
+        this.flags = flags;
     }
 
     public int getFd() {
@@ -185,11 +195,11 @@ class udpMessageOpen extends udpMessage implements Serializable{
         this.fileName = fileName;
     }
 
-    public EnumSet<Flag> getFlags() {
+    public ArrayList<Integer> getFlags() {
         return flags;
     }
 
-    public void setFlags(EnumSet<Flag> flags) {
+    public void setFlags(ArrayList<Integer> flags) {
         this.flags = flags;
     }
 }
@@ -250,13 +260,60 @@ class Msg implements  Serializable{
 }
 
 //contains the information about each file descriptor
-class fileDescriptor {
+class fileDescriptor implements  Serializable {
     private int fd;
+    private int clientID;
     private int posFromStart;
+    int readPermission;
+    int writePermission;
+    private ArrayList<Integer> flags;
 
-    public fileDescriptor(int fd, int posFromStart) {
+    public fileDescriptor(int fd, int clientID,int posFromStart) {
+        this.clientID = clientID;
         this.fd = fd;
         this.posFromStart = posFromStart;
+        this.readPermission = -1;
+        this.writePermission = -1;
+    }
+
+    public fileDescriptor(int fd, int clientID, int posFromStart, int readPermission, int writePermission) {
+        this.fd = fd;
+        this.clientID = clientID;
+        this.posFromStart = posFromStart;
+        this.readPermission = readPermission;
+        this.writePermission = writePermission;
+    }
+
+    public int getReadPermission() {
+        return readPermission;
+    }
+
+    public void setReadPermission(int readPermission) {
+        this.readPermission = readPermission;
+    }
+
+    public int getWritePermission() {
+        return writePermission;
+    }
+
+    public void setWritePermission(int writePermission) {
+        this.writePermission = writePermission;
+    }
+
+    public int getClientID() {
+        return clientID;
+    }
+
+    public void setClientID(int clientID) {
+        this.clientID = clientID;
+    }
+
+    public ArrayList<Integer> getFlags() {
+        return flags;
+    }
+
+    public void setFlags(ArrayList<Integer> flags) {
+        this.flags = flags;
     }
 
     public int getFd() {
