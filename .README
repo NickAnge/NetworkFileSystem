@@ -1,17 +1,52 @@
 BUFFERS
-Client
+Client-Server
 [x] Server Info
 [x] cacheMemory info
 [x] UdpMessage Buffer write,read,open
-[x] fileDescriptor info
+    []Type
+udpMessageOpen:
+    [x]fname
+    [x]flags
+    [x]fd (fileID)
+    [x]attributes
+udpMessageWrite:
+    [x]size to write
+    [x]msg
+    [-]fd (fileID)
+    [x]fdInfo(fileInformation)
+    [x]attributes
+udpMessageWrite:
+    [x]size to read
+    [x]msg
+    [-]fd (fileID)
+    [x]fdInfo(fileInformation)
+    [x]attributes
+fileID
+    [x]int fd
+    [x]int session
+fileDescritporInfo
+    [x]int posStart
+    [x]int writePermmission
+    [x]int readPermission
+
+
+CLIENT STRUCTURES
+middlewarefds
+    [x] Integer appID--->filedescriptor
+filesInClient
+    [x] Integer serverId --->fileInformation
+
+
+SERVER STRUCTURES
+filesInServer
+    []ids--->file Descriptors (Up to 5)
+    [] ansewr something
 
 for incoming msgs from server(read,write,open)
-[] readMsgs
-  [] Delete them when application takes them
+[x] readMsgs
+  [x] Delete them when application takes them
 [] writeMsgs
   [] DElete them ...
-[] openMsgs
-  [] Delete them...
 
 for requests
 [x] requests
@@ -21,22 +56,27 @@ for duplication
 [] idsMiddleware(read,write,open)
   [] Deletes them SOMEHOW **********
 
-for fds Information
-[x] filedescriptors
-  [x] Deletes them when application close them
-
 API
 
 1)[x] Init
     [x] ServerInfo(ipAddr,port)
     [x] cacheMemoryInfo()
 2)[x] open --> Open a file and return a file descriptor
-    [x] flags O_CREAT...
+    [x] No file EXIST in client
+        [x] Prepare the request
+            [x]uppMEssageOPen
+        [x]send the request
+        [x]block until client take the ansewr
+    [x]if file exists
+        [x]O_EXCL
+            [x]return error
+        [x]O_TRUNC && O_RDONLY
+            [x]return error
+        [x]O_TRUNC
+            send new request to server
+        [x]else give new id to fd and prepares the info
     [x] Sending packets until specific  id has been added to the idsMiddleware
-    [-] Store the fd with this pathname?
     [x] Store info for this file descriptor
-        [x] starting postiong
-        [x] fd communicates with server
     [x] Pass flag arguments to the server
         [x] O_CREAT --> create the file if its not exist
         [x] O_EXCL --> together with o_crate return error if file exists
@@ -44,19 +84,33 @@ API
         [x] O_RDONLY
         [x] O_RDWR
         [x] O_WRONLY
-     [] if appplication unblock and his request is not proecessed -->> lock again
+     [x] if appplication unblock and his request is not proecessed -->> lock again
      [x] if simple open , read and write flags;
+
+     TESTS
+     [] open for all scenarios of flags
+     [] open->read->open the same file (for write too)
+     [] open->write->open the same file (for read too)
 
 3)[] read
      [x] send specific starting byte and receive next starting byte after read for this specific file descriptor
-     [] 2/more clients read at the smae file
+     [x] 2/more clients read at the smae file
      [x] check file descriptor fields
-     [] if appplication unblock and his request is not proecessed -->> lock again
+     [x] if appplication unblock and his request is not proecessed -->> lock again
      [x] must return the readMsg to application somehow;
      [x] check if wanted read starting byte is too long
-4)[] write
-5)[] seek
 
+     TESTS
+     [] 2 or more apps read from the same big file
+     [] one applications reads andd then open a new fd and read again.
+     []
+4)[] write
+
+
+5)[x] seek
+       [x] SEEK_SET The offset is set to offset bytes.
+       [x] SEEK_CURR  The offset is set to its current location plus offset bytes.
+       [x] SEEK_END  The offset is set to the size of the file plus offset bytes.
 
 6)[] close
       [x] Remove fd info from client
@@ -74,14 +128,19 @@ Functionalities
 1)[] Εντοπισμός/δημιουργεία ενος αρχείου και λήψη του εσωτερικού αναγνωριστικού
        [x] send information to server(fname,flags)
        [x] server receive the request and prepares an integer id for the fname;
-            [x] gives an id to each file based on the creation time
+            [] based on the session and the new id
+                []session is the number specific for this run of the seerver if error occurs, new session number aftter renboot
+            [x] gives an id to each filedescripto
             [x] return an error -1 if (O_CREAT | O_EXCL)
+                [x] or wrong flags
             [x] return error if requested flag is note permitted based on the file permissions
        [x] client-middleware receives the packet and
             [x] stores the id value of the request
                [x] check for duplicates
             [x] create fileDescriptor for this value and returns openInt to app(specific for each app because is given from the client middleware)
                 [x] stores file descriptor to buffer(all information we want for readding, writing etc)
+
+
 2)[] διάβασμα δεδομένων απο αρχείο με βάση το αναγνωριστικό  του
        [x] give an id for the request readInt
        [x] create an udpMessageRead store it to request
@@ -91,18 +150,17 @@ Functionalities
             [x] client stores the id to midlewares id for duplicates
             [x] client stores the new file descriptor(new starting point) into file descriptors buffer
             [x] put the answer into readMsgs for App
-        []
+       []
         .....
 
 3)[] Γράψιμο δεδομένων σε αρχείο με βάση το αναγνωριστικό του
-
-
-Server
-[]
-[x] init of a directory args
-[x] sort directory files
-     This will be protection if the server crashes
-
-[] init a map that will match ids with fnames for easier searching
+      [x] check if this file descriptor exists
+      [x] check if this file descriptor has write permission
+      [x] writeInt++
+      [x] creat udpMessageWrite and add it to requests
+      [] block or not block ??????
+      [] when client-middleware wants sends this message too server
+      [] client is receivinve the server answer for new fd infos and add them
+      [] overwrite data if there is .
 
 
