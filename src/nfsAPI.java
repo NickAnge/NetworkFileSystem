@@ -11,12 +11,16 @@ public interface nfsAPI {
     public static final int O_WRONLY = 6; // WRITE only permission
     public static final int E_EXIST = -1; //error if file exists with O_EXCl
 
+    public static final int SEEK_SET = 10; //relative to start position
+    public static final int SEEK_CUR = 11; //relative to current position
+    public static final int SEEK_END = 12; //relative to end
+
 
 
 
     int myNfs_init(String ipaddr,int port,int cacheBlocks,int blockSize,int freshT);
     int myNfs_open(String fName, ArrayList<Integer> flags);
-    int myNfs_read(int fd, String buff,int n);
+    int myNfs_read(int fd, Msg buff,int n);
     int myNfs_write(int fd,String buff ,int n);
     int myNfs_seek(int fd ,int pos , int whence);
     int myNfs_close(int fd);
