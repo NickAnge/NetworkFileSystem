@@ -7,7 +7,7 @@ Client-Server
 udpMessageOpen:
     [x]fname
     [x]flags
-    [x]fd (fileID)
+    [x]fd (filedescriptor)
     [x]attributes
 udpMessageWrite:
     [x]size to write
@@ -39,8 +39,8 @@ filesInClient
 
 SERVER STRUCTURES
 filesInServer
-    []ids--->file Descriptors (Up to 5)
-    [] ansewr something
+    [x]ids--->file Descriptors (Up to 5)
+    [x] ansewr something
 
 for incoming msgs from server(read,write,open)
 [x] readMsgs
