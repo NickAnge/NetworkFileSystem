@@ -94,7 +94,7 @@ class udpMessageRead extends udpMessage implements Serializable{
     private Msg readMsg; // the msg
     private int readClientInt; // the id for duplicates in client
     private fileDescriptor fd; //information for this fd
-    private  fileID idfd;
+//    private  fileID idfd;
     private fileAttributes attributes; //size
 
     public udpMessageRead(String type, int readClientInt, fileDescriptor fd,Msg readMsg, double size,fileAttributes attributes) {
@@ -112,7 +112,7 @@ class udpMessageRead extends udpMessage implements Serializable{
         this.readMsg = readMsg;
         this.readClientInt = readClientInt;
         this.fd = fd;
-        this.idfd = idfd;
+//        this.idfd = idfd;
         this.attributes = attributes;
     }
 
@@ -124,13 +124,13 @@ class udpMessageRead extends udpMessage implements Serializable{
         this.attributes = attributes;
     }
 
-    public fileID getIdfd() {
-        return idfd;
-    }
-
-    public void setIdfd(fileID idfd) {
-        this.idfd = idfd;
-    }
+//    public fileID getIdfd() {
+//        return idfd;
+//    }
+//
+//    public void setIdfd(fileID idfd) {
+//        this.idfd = idfd;
+//    }
 
     public fileAttributes getAttributes() {
         return attributes;
@@ -175,26 +175,43 @@ class udpMessageRead extends udpMessage implements Serializable{
 class udpMessageOpen extends udpMessage implements Serializable{
     private String fileName;
     private ArrayList<Integer> flags;
-    private fileID  fd; // maybe change it
+//    private fileID  fd; // maybe change it
+    private int openACK;
     private int openClientInt;
     private fileAttributes attributes;
+    private fileDescriptor filed;
 
-    public udpMessageOpen(String type, int clientId, fileID fd, String fileName, ArrayList<Integer> flags,fileAttributes attributes) {
+    public udpMessageOpen(String type, String fileName, ArrayList<Integer> flags, int openACK, fileAttributes attributes, fileDescriptor filed) {
         super(type);
         this.fileName = fileName;
-        this.fd = fd;
-        this.openClientInt = clientId;
         this.flags = flags;
+        this.openACK = openACK;
         this.attributes = attributes;
+        this.filed = filed;
+    }
+    public udpMessageOpen(String type, ArrayList<Integer> flags, int openACK, int openClientInt, fileAttributes attributes, fileDescriptor filed) {
+        super(type);
+        this.flags = flags;
+        this.openACK = openACK;
+        this.openClientInt = openClientInt;
+        this.attributes = attributes;
+        this.filed = filed;
     }
 
+    public fileDescriptor getFiled() {
+        return filed;
+    }
 
-    public udpMessageOpen(String type, fileID fd, int openClientInt,ArrayList<Integer> flags,fileAttributes attributes) {
-        super(type);
-        this.fd = fd;
-        this.openClientInt = openClientInt;
-        this.flags = flags;
-        this.attributes = attributes;
+    public void setFiled(fileDescriptor filed) {
+        this.filed = filed;
+    }
+
+    public int getOpenACK() {
+        return openACK;
+    }
+
+    public void setOpenACK(int openACK) {
+        this.openACK = openACK;
     }
 
     public fileAttributes getAttributes() {
@@ -205,13 +222,6 @@ class udpMessageOpen extends udpMessage implements Serializable{
         this.attributes = attributes;
     }
 
-    public fileID getFd() {
-        return fd;
-    }
-
-    public void setFd(fileID fd) {
-        this.fd = fd;
-    }
 
     public int getOpenClientInt() {
         return openClientInt;
@@ -314,10 +324,35 @@ class udpMessageWrite extends udpMessage implements Serializable {
 class clientFileInformation implements Serializable {
     fileDescriptor fd;
     fileAttributes attributes;
+    private int readPermission;
+    private int writePermission;
 
     public clientFileInformation(fileDescriptor fd, fileAttributes attributes) {
         this.fd = fd;
         this.attributes = attributes;
+    }
+
+    public clientFileInformation(fileDescriptor fd, fileAttributes attributes, int readPermission, int writePermission) {
+        this.fd = fd;
+        this.attributes = attributes;
+        this.readPermission = readPermission;
+        this.writePermission = writePermission;
+    }
+
+    public int getReadPermission() {
+        return readPermission;
+    }
+
+    public void setReadPermission(int readPermission) {
+        this.readPermission = readPermission;
+    }
+
+    public int getWritePermission() {
+        return writePermission;
+    }
+
+    public void setWritePermission(int writePermission) {
+        this.writePermission = writePermission;
     }
 
     public fileDescriptor getFd() {
@@ -336,8 +371,6 @@ class clientFileInformation implements Serializable {
         this.attributes = attributes;
     }
 }
-
-
 class Msg implements  Serializable{
     String msg;
 
@@ -353,30 +386,18 @@ class Msg implements  Serializable{
         this.msg = msg;
     }
 }
-
 //contains the information about each file descriptor
 class fileDescriptor implements  Serializable {
-    private fileID fd;
-    private int clientID;
-    private long posFromStart;
-    int readPermission;
-    int writePermission;
-//    private ArrayList<Integer> flags;
+    private fileID fd; //serverID
+    private int clientID; //clientID
+    private long posFromStart; //posFromStart
+    private  int readPermission;
+    private int writePermission;
 
     public fileDescriptor(fileID fd, int clientID,long posFromStart) {
         this.clientID = clientID;
         this.fd = fd;
         this.posFromStart = posFromStart;
-        this.readPermission = -1;
-        this.writePermission = -1;
-    }
-
-    public fileDescriptor(fileID fd, int clientID, long posFromStart, int readPermission, int writePermission) {
-        this.fd = fd;
-        this.clientID = clientID;
-        this.posFromStart = posFromStart;
-        this.readPermission = readPermission;
-        this.writePermission = writePermission;
     }
 
     public fileDescriptor(fileID fd, long posFromStart, int readPermission, int writePermission) {
@@ -399,6 +420,14 @@ class fileDescriptor implements  Serializable {
     }
 
     public void setWritePermission(int writePermission) {
+        this.writePermission = writePermission;
+    }
+
+    public fileDescriptor(fileID fd, int clientID, long posFromStart, int readPermission, int writePermission) {
+        this.fd = fd;
+        this.clientID = clientID;
+        this.posFromStart = posFromStart;
+        this.readPermission = readPermission;
         this.writePermission = writePermission;
     }
 
@@ -427,8 +456,23 @@ class fileDescriptor implements  Serializable {
     }
 }
 
+//attrivutes for the file(size)
 class fileAttributes implements Serializable {
     long size;
+    ArrayList<Integer>flags;
+
+    public fileAttributes(long size, ArrayList<Integer> flags) {
+        this.size = size;
+        this.flags = flags;
+    }
+
+    public ArrayList<Integer> getFlags() {
+        return flags;
+    }
+
+    public void setFlags(ArrayList<Integer> flags) {
+        this.flags = flags;
+    }
 
     public fileAttributes(long size) {
         this.size = size;
@@ -443,6 +487,8 @@ class fileAttributes implements Serializable {
     }
 }
 
+
+////SERVERRRRR BUFFERS////
 class serversFdsInfo {
     File file;
     FileChannel fd;
@@ -450,10 +496,6 @@ class serversFdsInfo {
     public serversFdsInfo(File file, FileChannel fd) {
         this.file = file;
         this.fd = fd;
-    }
-
-    public File getFile() {
-        return file;
     }
 
     public void setFile(File file) {
@@ -464,22 +506,31 @@ class serversFdsInfo {
         return fd;
     }
 
+    public File getFile() {
+        return file;
+    }
+
     public void setFd(FileChannel fd) {
         this.fd = fd;
     }
 }
-
-
 class fileInformation {
+
     private String fname;
     private fileAttributes attributes;
     private ArrayList<Integer> flags;
+
 //    private fileID idsToServer;
 
     public fileInformation(String fname, fileAttributes attributes, ArrayList<Integer> flags) {
         this.fname = fname;
         this.attributes = attributes;
         this.flags = flags;
+    }
+
+    public fileInformation(String fname, fileAttributes attributes) {
+        this.fname = fname;
+        this.attributes = attributes;
     }
 
     public String getFname() {
@@ -507,7 +558,84 @@ class fileInformation {
     }
 
 }
+class udpMessageMaxCapacityAnswer extends udpMessage implements Serializable {
+//    private String fileName;
+//    private ArrayList<Integer> flags;
+    private fileID  fd; // maybe change it
+    private int openClientInt;
+    private fileAttributes attributes;
 
+    public udpMessageMaxCapacityAnswer(String type) {
+        super(type);
+    }
+
+    public udpMessageMaxCapacityAnswer(String type, fileID fd, int openClientInt, fileAttributes attributes) {
+        super(type);
+        this.fd = fd;
+        this.openClientInt = openClientInt;
+        this.attributes = attributes;
+    }
+
+    public int getOpenClientInt() {
+        return openClientInt;
+    }
+
+    public void setOpenClientInt(int openClientInt) {
+        this.openClientInt = openClientInt;
+    }
+
+    public fileAttributes getAttributes() {
+        return attributes;
+    }
+
+    public void setAttributes(fileAttributes attributes) {
+        this.attributes = attributes;
+    }
+
+    public fileID getFd() {
+        return fd;
+    }
+
+    public void setFd(fileID fd) {
+        this.fd = fd;
+    }
+}
+class udpMessageDontKnowThisID extends udpMessage{
+    private String xType;
+    private fileDescriptor fd;
+    private int typeID;
+
+    public udpMessageDontKnowThisID(String type, String xType, fileDescriptor fd,int typeID) {
+        super(type);
+        this.xType = xType;
+        this.fd = fd;
+        this.typeID = typeID;
+    }
+
+    public int getTypeID() {
+        return typeID;
+    }
+
+    public void setTypeID(int typeID) {
+        this.typeID = typeID;
+    }
+
+    public String getxType() {
+        return xType;
+    }
+
+    public void setxType(String xType) {
+        this.xType = xType;
+    }
+
+    public fileDescriptor getFd() {
+        return fd;
+    }
+
+    public void setFd(fileDescriptor fd) {
+        this.fd = fd;
+    }
+}
 class fileID implements Serializable{
     private int fd;
     private int session;

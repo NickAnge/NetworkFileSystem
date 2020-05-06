@@ -1,6 +1,7 @@
 
 import java.io.*;
 import java.net.*;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -21,7 +22,8 @@ public class NfsServer {
     public static final int O_WRONLY = 6; // WRITE only permission
     public static final int E_EXIST = -1; //error if file exists with O_EXCl
     public  static final int ERROR = -2;
-    public  static  int MAX_NUM_OF_FD = 5;
+    public  static int MAX_NUM_OF_FD = 10;
+    public static final String NO_THIS_ID = "DONT_KNOW_THIS_ID";
 
     public static void main(String[] args) {
 
@@ -92,7 +94,6 @@ public class NfsServer {
                 packet = new DatagramPacket(buffer, buffer.length, serverSocket.getInetAddress(), serverSocket.getLocalPort());
                 System.out.println("Paw ston server gia receive");
 
-//                FileChannel newFd = new File
                 serverSocket.receive(packet);
 
                 System.out.println(packet.getLength());
@@ -106,17 +107,31 @@ public class NfsServer {
                     continue;
                 }
 
-
                 String type = checkMessageType(receiveMessage);
-                if(numOfFds + 1 > MAX_NUM_OF_FD){
-                    //return no more fds can ...
-                }
 
                 if (type.equals("Open")) {
-                    numOfFds ++;
-                    System.out.println("New open request to Server");
+                    System.out.println("New open request to Server id " + ids);
                     udpMessageOpen openMsg = (udpMessageOpen) receiveMessage;
                     System.out.println("Request file name: " + openMsg.getFileName());
+
+                    //check if file exist , else check if it is possible to open new file
+                    int exist = -1;
+
+                    Set<fileID> Keys = filesInServer.keySet();
+                    for(fileID temp : Keys){
+                        serversFdsInfo file = filesInServer.get(temp);
+                        if(file.getFile().getName().equals(openMsg.getFileName())){
+                            exist = 1;
+                        }
+                    }
+
+                    if(exist == -1){
+                        int check = canServer(openMsg,ids,packet.getAddress(),packet.getPort());
+                        if(check < 0){
+                            continue;
+                        }
+                    }
+
 
                     Path newPath  = Paths.get(directory +"/"+ openMsg.getFileName());
                     File newFile = new File(String.valueOf(newPath));
@@ -125,64 +140,94 @@ public class NfsServer {
 
 
                     nextId =  fillAccessMode(openMsg,filesInServer,newFile,ids);
-                    fileID newfd =  new fileID(nextId,session);
 
-                    ArrayList<Integer> flags = new ArrayList<>();
+                    System.out.println("nextID" + nextId);
 
-                    if(nextId > ids){
+                    fileID newfd =  existedID(nextId,filesInServer);
+
+
+//                    fileDescriptor fd = new fileDescriptor(newfd,openMsg.getOpenClientInt(),openMsg.getFiled().getPosFromStart());
+                    openMsg.getFiled().setFd(newfd);
+                    ArrayList<Integer>flags = takeFlags(newFile);
+
+                    fileAttributes attributes = new fileAttributes(newFile.length(),flags);
+
+                    if(nextId > ids) {
+                        //NEW ADDITION OF A FILE DESCRIPTOR
                         ids = nextId;
-                        flags = openMsg.getFlags();
-                    }
-                    else if(nextId >= 0){
-                        //take already exist files
-                        flags =  takeFlags(newFile);
-                    }
-                    if(nextId >= 0){
-
-                        // this Hashmap will match ids with names for faster searching
-
-                        FileChannel fd = generateChannel(newFile,openMsg);
-//                        FileChannel fd = FileChannel.open(newPath);
-
+                        FileChannel fd = generateChannel(newFile);
                         serversFdsInfo  newInfo = new serversFdsInfo(newFile,fd);
-                        //add this file descriptor to temporary structure; limit to 5 file descriptors.
                         filesInServer.put(newfd,newInfo);
 
-                        //size of file
-                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
+//                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
+
+                    }
+                    else if(openMsg.getFlags().contains(O_TRUNC)){
+                        Set<StandardOpenOption> ops = new TreeSet<>();
+                        ops.add(StandardOpenOption.TRUNCATE_EXISTING);
+                        FileChannel fdnew = FileChannel.open(Paths.get(newFile.getPath()),ops);
+
+                        filesInServer.get(newfd).setFd(fdnew);
+//                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
+
+                    }
+                    else {
+                        attributes.setSize(0);
+//                        openMsg.getAttributes().setSize(0);
                     }
 
-                    System.out.println("id"+ newfd.getFd());
-                    udpMessage serverAnswer = new udpMessageOpen("Open", newfd, openMsg.getOpenClientInt(),flags,openMsg.getAttributes());
+                    udpMessageOpen serverAnswer = new udpMessageOpen("Open",openMsg.getFlags(),openMsg.getOpenACK(),openMsg.getFiled().getClientID(),attributes,openMsg.getFiled());
                     sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
                 }
                 else if(type.equals("Read")){
-//                    System.out.println("New read request to Server");
-//                    udpMessageRead readMsg = (udpMessageRead) receiveMessage;
-//
-//                   if(!idsFIles.containsKey(readMsg.getFd().getFd())){
-//                        File file = files.get(readMsg.getFd().getFd());
-//                        idsFIles.put(readMsg.getFd().getFd(),file);
-//                   }
-//
-//                   FileInputStream reading = new FileInputStream(idsFIles.get(readMsg.getFd().getFd()));
-//
-//                   reading.skip(readMsg.getFd().getPosFromStart());
-//                   byte [] bytes = new byte[(int) readMsg.getSize()];
-//                   int buff = reading.read(bytes,0,(int)readMsg.getSize());
-//
-//                   String s = new String(bytes, StandardCharsets.UTF_8);
-//                   long len = (long) (readMsg.getFd().getPosFromStart() + readMsg.getSize());
-//                   readMsg.getFd().setPosFromStart(len);
-//                   Msg msg = new Msg(s);
-//
-//                   fileAttributes attributes = new fileAttributes(idsFIles.get(readMsg.getFd().getFd()).length());
-//                   udpMessageRead serverAnswer = new udpMessageRead("Read",msg,readMsg.getReadClientInt(),readMsg.getFd(),attributes);
-//
-//
-//                   sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
+                    System.out.println("New read request to Server");
+                    udpMessageRead readMsg = (udpMessageRead) receiveMessage;
 
 
+                    fileID check = null;
+                    check = existFileId(filesInServer,readMsg.getFd().getFd());
+
+
+                    if(check == null){
+                        //return that it must opened again//we dont know this fileId
+                        System.out.println("MPHKA EDW");
+                        udpMessageDontKnowThisID answer = new udpMessageDontKnowThisID(NO_THIS_ID,type,readMsg.getFd(),readMsg.getReadClientInt());
+                        sendUdpMessage(answer,packet.getAddress(),packet.getPort());
+                        continue;
+                    }
+
+                    FileChannel currentChannel = filesInServer.get(check).getFd();
+
+                    currentChannel.position(readMsg.getFd().getPosFromStart());
+
+//                    if(readMsg)
+                    int size = 0;
+                    if(readMsg.getSize() > 1024){
+                        size = 1024;
+                    }
+                    else {
+                        size = (int) readMsg.getSize();
+                    }
+                    ByteBuffer byteBuffer = ByteBuffer.allocate(size);
+
+                    long read = currentChannel.read(new ByteBuffer[]{byteBuffer});
+
+                    if (read <= 0) {
+                        System.out.println("PROblem" + read);
+                    }
+
+                   String s = new String(byteBuffer.array(), StandardCharsets.UTF_8);
+                   System.out.println(s);
+                   readMsg.getAttributes().setSize(filesInServer.get(check).getFile().length());
+                   Msg msg = new Msg(s);
+                   readMsg.setReadMsg(msg);
+
+                   readMsg.getFd().setPosFromStart(currentChannel.position());
+
+                   fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize());
+                   udpMessageRead serverAnswer = new udpMessageRead("Read",msg,readMsg.getReadClientInt(),readMsg.getFd(),attributes);
+
+                   sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
                 }
                 else if(type.equals("Write")){
 //                    System.out.println("New write request to Server");
@@ -245,6 +290,7 @@ public class NfsServer {
 
 
 //                    out.write();
+
                 }
 
             } catch (UnknownHostException e) {
@@ -258,6 +304,18 @@ public class NfsServer {
 
     }
 
+    public static fileID existedID(int id,HashMap<fileID,serversFdsInfo> fds){
+        Set<fileID> keys = fds.keySet();
+
+        for(fileID temp : keys){
+           if(temp.getFd() == id){
+               return temp;
+           }
+        }
+
+        fileID newfd = new fileID(id,session);
+        return  newfd;
+    }
     public static String readFunc(long start,long end,FileInputStream read){
         byte[] byteBuffer = new byte[1024];
         String ret = "";
@@ -292,43 +350,43 @@ public class NfsServer {
         }
         return ret;
     }
-    public static long fileId(File newFile){
-
-        Long inode = null;
-        try {
-            inode = (Long) Files.getAttribute(newFile.toPath(), "unix:ino");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-//        long fileKey = (long) attr.fileKey();
-
-
-        return inode;
-    }
-    public static File[] sortingFilesOfDirectory(File directory) {
-        File[] files = directory.listFiles();
-        assert files != null;
-        Arrays.sort(files, new Comparator<File>() {
-            public int compare(File f1, File f2) {
-                long l1 = fileId(f1);
-                long l2 = fileId(f2);
-                return Long.valueOf(l1).compareTo(l2);
-            }
-        });
-
-        return files;
-    }
-    public static  long getFileCreation(File f1){
-        try {
-            BasicFileAttributes attr = Files.readAttributes(f1.toPath(),
-                    BasicFileAttributes.class);
-            return attr.creationTime()
-                    .toInstant().toEpochMilli();
-        } catch (IOException e) {
-            throw new RuntimeException(f1.getAbsolutePath(), e);
-        }
-    }
+//    public static long fileId(File newFile){
+//
+//        Long inode = null;
+//        try {
+//            inode = (Long) Files.getAttribute(newFile.toPath(), "unix:ino");
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//
+////        long fileKey = (long) attr.fileKey();
+//
+//
+//        return inode;
+//    }
+//    public static File[] sortingFilesOfDirectory(File directory) {
+//        File[] files = directory.listFiles();
+//        assert files != null;
+//        Arrays.sort(files, new Comparator<File>() {
+//            public int compare(File f1, File f2) {
+//                long l1 = fileId(f1);
+//                long l2 = fileId(f2);
+//                return Long.valueOf(l1).compareTo(l2);
+//            }
+//        });
+//
+//        return files;
+//    }
+//    public static  long getFileCreation(File f1){
+//        try {
+//            BasicFileAttributes attr = Files.readAttributes(f1.toPath(),
+//                    BasicFileAttributes.class);
+//            return attr.creationTime()
+//                    .toInstant().toEpochMilli();
+//        } catch (IOException e) {
+//            throw new RuntimeException(f1.getAbsolutePath(), e);
+//        }
+//    }
     public static String checkMessageType(udpMessage msg){
 
         if(msg.getType().equals("Open")){
@@ -381,22 +439,6 @@ public class NfsServer {
 
     }
 
-
-    public static  void  printList(File[] files){
-        for(File file : files){
-            System.out.println(file.getName());
-            Path path = Paths.get(file.getAbsolutePath());
-            try {
-                BasicFileAttributes att = Files.readAttributes(path,BasicFileAttributes.class);
-                System.out.println(att.fileKey());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-        }
-    }
-
-
     public static ArrayList<Integer> takeFlags(File newFile){
         ArrayList<Integer> flags = new ArrayList<>();
 
@@ -411,6 +453,7 @@ public class NfsServer {
         }
         return flags;
     }
+
     public  static int returnIdFile(HashMap<fileID,serversFdsInfo> fds, udpMessageOpen open) {
         Set<fileID> keys = fds.keySet();
 
@@ -422,16 +465,12 @@ public class NfsServer {
             }
         }
 
-        return 1;
+        return -1;
     }
 
 
     public static int fillAccessMode(udpMessageOpen openMsg,HashMap<fileID,serversFdsInfo> fds,File newFile,int lastID){
         int nextId = -2;
-//        int O_EXCL = -1;
-//        int O_TRUNC = -1;
-
-//        File newFile = new File(directory + "/" + openMsg.getFileName());
 
         if(openMsg.getFlags().contains(O_CREAT)) {
             try {
@@ -455,23 +494,16 @@ public class NfsServer {
                 }
 
                 if (newFile.createNewFile()) {
-                    if (openMsg.getFlags().contains(O_RDONLY)) {
-                        newFile.setReadOnly();
-                    } else if (openMsg.getFlags().contains(O_WRONLY)) {
-                        newFile.setReadable(false);
-                        newFile.setWritable(true);
-                    } else if (openMsg.getFlags().contains(O_RDWR)) {
-                        newFile.setWritable(true);
-                        newFile.setReadable(true);
-                    }
-
                     nextId = lastID + 1;
-
                     return nextId;
                 } else {
                     if (openMsg.getFlags().contains(O_RDONLY)) {
                         if (newFile.canRead()) {
                             nextId = returnIdFile(fds, openMsg);
+                            if(nextId == -1){
+                                nextId = lastID + 1;
+                                return nextId;
+                            }
                             return nextId;
                         } else {
                             return ERROR;
@@ -480,6 +512,10 @@ public class NfsServer {
                         if (newFile.canWrite()) {
                             System.out.println("mphka");
                             nextId = returnIdFile(fds, openMsg);
+                            if(nextId ==-1){
+                                nextId = lastID + 1;
+                                return nextId;
+                            }
                             return nextId;
                         }
                         else {
@@ -489,13 +525,24 @@ public class NfsServer {
                     } else if (openMsg.getFlags().contains(O_RDWR)) {
                         if (newFile.canRead() && newFile.canWrite()) {
                             nextId = returnIdFile(fds, openMsg);
+                            if(nextId ==-1){
+                                nextId = lastID + 1;
+                                return nextId;
+                            }
                             return nextId;
                         }
                         else {
                             return  ERROR;
                         }
                     }
+                    //if exists in already opened files
                     nextId = returnIdFile(fds, openMsg);
+
+                    if(nextId ==-1){
+                        nextId = lastID + 1;
+                        return nextId;
+                    }
+
                     return nextId;
                 }
             } catch(IOException e){
@@ -519,9 +566,23 @@ public class NfsServer {
                         }
                     }
                 }
+
+//                nextId = returnIdFile(fds, openMsg);
+//
+//                if(nextId == -1){
+//                    nextId = lastID + 1;
+//                    return  nextId;
+//                }
+//                else {
+//                    return nextId;
+//                }
                 if (openMsg.getFlags().contains(O_RDONLY)) {
                     if (newFile.canRead()) {
                         nextId = returnIdFile(fds, openMsg);
+                        if(nextId == -1){
+                            nextId = lastID + 1;
+                            return  nextId;
+                        }
                         return nextId;
                     }
                     else {
@@ -530,11 +591,19 @@ public class NfsServer {
                 } else if (openMsg.getFlags().contains(O_WRONLY)) {
                     if (newFile.canWrite()) {
                         nextId = returnIdFile(fds, openMsg);
+                        if(nextId == -1){
+                            nextId = lastID + 1;
+                            return  nextId;
+                        }
                         return nextId;
                     }
                 } else if (openMsg.getFlags().contains(O_RDWR)) {
                     if (newFile.canRead() && newFile.canWrite()) {
                         nextId = returnIdFile(fds, openMsg);
+                        if(nextId == -1){
+                            nextId = lastID + 1;
+                            return  nextId;
+                        }
                         return nextId;
                     }
                     else {
@@ -543,6 +612,10 @@ public class NfsServer {
                 }
                 else {
                     nextId = returnIdFile(fds, openMsg);
+                    if(nextId == -1){
+                        nextId = lastID + 1;
+                        return  nextId;
+                    }
                     return nextId;
                 }
             }
@@ -550,16 +623,14 @@ public class NfsServer {
         return  nextId;
     }
 
-    public static FileChannel generateChannel(File newfile,udpMessageOpen open){
+    public static FileChannel generateChannel(File newfile){
+
         Set<StandardOpenOption> ops = new TreeSet<>();
 
-        if(open.getFlags().contains(O_WRONLY)){
-            ops.add(StandardOpenOption.WRITE);
-        }
-        else if (open.getFlags().contains(O_RDWR)){
-            ops.add(StandardOpenOption.READ);
-            ops.add(StandardOpenOption.WRITE);
-        }
+
+        ops.add(StandardOpenOption.READ);
+        ops.add(StandardOpenOption.WRITE);
+
         if(ops.isEmpty()){
             try {
                 FileChannel fd = FileChannel.open(Paths.get(newfile.getPath()));
@@ -578,4 +649,31 @@ public class NfsServer {
         }
         return null;
     }
+
+    public static int canServer(udpMessageOpen openMsg,int ids,InetAddress ip ,int port){
+
+        if(ids + 1 > MAX_NUM_OF_FD){
+            //return no more fds can ...
+            openMsg.getAttributes().setSize(0);
+            fileID newfd = new fileID(-1,-1);
+            udpMessageMaxCapacityAnswer answer = new udpMessageMaxCapacityAnswer("MAX_CAPACITY", newfd,openMsg.getOpenClientInt(),openMsg.getAttributes());
+            sendUdpMessage(answer,ip,port);
+            return  -1;
+        }
+        return 1;
+    }
+
+    public static fileID existFileId(HashMap<fileID,serversFdsInfo> fd,fileID currentfd){
+        Set<fileID> keys = fd.keySet();
+        for(fileID temp : keys){
+            serversFdsInfo file = fd.get(temp);
+
+            if(temp.getFd() == currentfd.getFd() && temp.getSession() == currentfd.getSession()){
+                return temp;
+            }
+        }
+
+        return null;
+    }
+
 }
