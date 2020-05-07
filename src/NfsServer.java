@@ -23,7 +23,8 @@ public class NfsServer {
     public static final int E_EXIST = -1; //error if file exists with O_EXCl
     public  static final int ERROR = -2;
     public  static int MAX_NUM_OF_FD = 10;
-    public static final String NO_THIS_ID = "DONT_KNOW_THIS_ID";
+    public static final String NO_THIS_ID_READ = "DONT_KNOW_THIS_ID_READ";
+    public static final String NO_THIS_ID_WRITE = "DONT_KNOW_THIS_ID_WRITE";
 
     public static void main(String[] args) {
 
@@ -132,12 +133,10 @@ public class NfsServer {
                         }
                     }
 
-
                     Path newPath  = Paths.get(directory +"/"+ openMsg.getFileName());
                     File newFile = new File(String.valueOf(newPath));
 
                     int nextId = -1;
-
 
                     nextId =  fillAccessMode(openMsg,filesInServer,newFile,ids);
 
@@ -145,11 +144,9 @@ public class NfsServer {
 
                     fileID newfd =  existedID(nextId,filesInServer);
 
-
 //                    fileDescriptor fd = new fileDescriptor(newfd,openMsg.getOpenClientInt(),openMsg.getFiled().getPosFromStart());
                     openMsg.getFiled().setFd(newfd);
                     ArrayList<Integer>flags = takeFlags(newFile);
-
                     fileAttributes attributes = new fileAttributes(newFile.length(),flags);
 
                     if(nextId > ids) {
@@ -177,6 +174,11 @@ public class NfsServer {
                     }
 
                     udpMessageOpen serverAnswer = new udpMessageOpen("Open",openMsg.getFlags(),openMsg.getOpenACK(),openMsg.getFiled().getClientID(),attributes,openMsg.getFiled());
+//                    try {
+//                        Thread.sleep(30000);
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
                     sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
                 }
                 else if(type.equals("Read")){
@@ -190,8 +192,8 @@ public class NfsServer {
 
                     if(check == null){
                         //return that it must opened again//we dont know this fileId
-                        System.out.println("MPHKA EDW");
-                        udpMessageDontKnowThisID answer = new udpMessageDontKnowThisID(NO_THIS_ID,type,readMsg.getFd(),readMsg.getReadClientInt());
+                        System.out.println("MPHKA EDW read");
+                        udpMessageDontKnowThisID answer = new udpMessageDontKnowThisID(NO_THIS_ID_READ,type,readMsg.getFd(),readMsg.getReadClientInt());
                         sendUdpMessage(answer,packet.getAddress(),packet.getPort());
                         continue;
                     }
@@ -230,66 +232,47 @@ public class NfsServer {
                    sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
                 }
                 else if(type.equals("Write")){
-//                    System.out.println("New write request to Server");
+                    System.out.println("New write request to Server");
 //
-//                    udpMessageWrite writeΜsg = (udpMessageWrite) receiveMessage;
-//
-//                    if(!idsFIles.containsKey(writeΜsg.getFd().getFd())){
-//                        File file = files.get(writeΜsg.getFd().getFd());
-//                        idsFIles.put(writeΜsg.getFd().getFd(),file);
-//                    }
-////                    FileOutputStream out = new FileOutputStream(idsFIles.get(writeΜsg.getFd().getFd()));
-//                    FileInputStream read = new FileInputStream(idsFIles.get(writeΜsg.getFd().getFd()));
-//                    try {
-//                        Thread.sleep(10000);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
-//                    byte [] byteBuffer = new byte[1024];
-//                    long posStart = writeΜsg.getFd().getPosFromStart();
-//
-//                    int len = 0;
-//
-//                    long temp = posStart;
-//                    System.out.println("PosSTART  :"+ posStart);
-//
-//                    String readMsg = readFunc(0,writeΜsg.getFd().getPosFromStart(),read);
-//
-//                    System.out.println(readMsg);
-//                    readMsg = readMsg + writeΜsg.getWriteMsg().msg;
-//                    //CAREFULL LONG TO INT
-//
-//                    System.out.println("readMsg"+ readMsg);
-//
-//                    writeΜsg.getFd().setPosFromStart(posStart + writeΜsg.getWriteMsg().getMsg().length());
-//                    writeΜsg.getAttributes().setSize(idsFIles.get(writeΜsg.getFd().getFd()).length());
-//
-//
-//                    System.out.println("start"+ writeΜsg.getFd().getPosFromStart());
-//                    System.out.println("SIZE :"+ writeΜsg.getAttributes().getSize());
-//                    readMsg = readMsg + readFunc(writeΜsg.getFd().getPosFromStart(),writeΜsg.getAttributes().getSize(),read);
-//
-//                    System.out.println(readMsg);
-//
-//                    byte[] b = readMsg.getBytes();
-////                    out.write(b);
-//
-//                    long lenWrite = (long) (writeΜsg.getFd().getPosFromStart() + writeΜsg.getSize());
-//                    writeΜsg.getFd().setPosFromStart(lenWrite);
-////                    Msg msg = new Msg(s);
-//
-//                    fileAttributes attributes = new fileAttributes(idsFIles.get(writeΜsg.getFd().getFd()).length());
-//                    udpMessageWrite serverAnswer = new udpMessageWrite("Write",writeΜsg.getWriteClientInt(),writeΜsg.getFd(),attributes);
-//
-//
-//                    sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
-//                    while(read.read())
+                    udpMessageWrite writeΜsg = (udpMessageWrite) receiveMessage;
+                    fileID check = null;
+
+                    check = existFileId(filesInServer,writeΜsg.getFd().getFd());
+
+                    if(check == null){
+                        //return that it must opened again//we dont know this fileId
+                        System.out.println("MPHKA EDW write");
+                        udpMessageDontKnowThisID answer = new udpMessageDontKnowThisID(NO_THIS_ID_WRITE,type,writeΜsg.getFd(),writeΜsg.getWriteClientInt());
+                        sendUdpMessage(answer,packet.getAddress(),packet.getPort());
+                        continue;
+                    }
+
+                    FileChannel writeChannel = filesInServer.get(check).getFd();
+
+                    writeChannel.position(writeΜsg.getFd().getPosFromStart());
+//                    writeChannel.position(100);
+                    int size = 0;
+                    if(writeΜsg.getSize() > 1024){
+                        size = 1024;
+                    }
+                    else {
+                        size = (int) writeΜsg.getSize();
+                    }
+                    ByteBuffer byteBuffer = ByteBuffer.wrap(writeΜsg.getWriteMsg().getMsg().getBytes());
 
 
-//                    byte [] bytes = new byte[(int) readMsg.getSize()];
+                    long read = writeChannel.write(new ByteBuffer[]{byteBuffer});
 
+                    if (read <= 0) {
+                        System.out.println("PROblem" + read);
+                    }
 
-//                    out.write();
+                    writeΜsg.getAttributes().setSize(writeChannel.size());
+                    writeΜsg.getFd().setPosFromStart(writeChannel.position());
+
+                    udpMessageWrite retMsg = new udpMessageWrite("Write",writeΜsg.getWriteClientInt(),writeΜsg.getFd(),writeΜsg.getAttributes());
+                    sendUdpMessage(retMsg,packet.getAddress(),packet.getPort());
+//
 
                 }
 
