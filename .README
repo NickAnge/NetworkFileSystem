@@ -35,8 +35,13 @@ middlewarefds
     [x] Integer appID--->filedescriptor
 filesInClient
     [x] Integer serverId --->fileInformation
-
-
+STRUCTURES IF NO ID MESSAGE CAME
+noIDreadMessages
+    [x] Integer appID --->LIST of Messages read
+    [] remove this structure when closing this file descriptor
+    []messages are removing when we receive ashwer from server for them
+noIDwriteMessages
+    [x] Integer appID --->List of messages write
 SERVER STRUCTURES
 filesInServer
     [x]ids--->file Descriptors (Up to 5)
@@ -99,6 +104,9 @@ API
      [x] if appplication unblock and his request is not proecessed -->> lock again
      [x] must return the readMsg to application somehow;
      [x] check if wanted read starting byte is too long
+     [x] if server hasnt this fileID send back to client an answer with the obligation to client to send a new open request for a new ID
+     [x] this newID is used for new communication with server
+     []
 
      TESTS
      [] 2 or more apps read from the same big file
@@ -164,3 +172,16 @@ Functionalities
       [] overwrite data if there is .
 
 
+Server
+Open
+    []
+Read
+    []
+Write
+    []
+Max_CAPACITY
+    []
+NO_ID_READ
+    []
+NO_ID_WRITE
+    []

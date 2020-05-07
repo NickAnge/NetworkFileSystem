@@ -518,15 +518,8 @@ class fileInformation {
 
     private String fname;
     private fileAttributes attributes;
-    private ArrayList<Integer> flags;
 
 //    private fileID idsToServer;
-
-    public fileInformation(String fname, fileAttributes attributes, ArrayList<Integer> flags) {
-        this.fname = fname;
-        this.attributes = attributes;
-        this.flags = flags;
-    }
 
     public fileInformation(String fname, fileAttributes attributes) {
         this.fname = fname;
@@ -549,13 +542,6 @@ class fileInformation {
         this.attributes = attributes;
     }
 
-    public ArrayList<Integer> getFlags() {
-        return flags;
-    }
-
-    public void setFlags(ArrayList<Integer> flags) {
-        this.flags = flags;
-    }
 
 }
 class udpMessageMaxCapacityAnswer extends udpMessage implements Serializable {
@@ -659,5 +645,30 @@ class fileID implements Serializable{
 
     public void setSession(int session) {
         this.session = session;
+    }
+}
+class locker {
+    Object lock;
+    int requests;
+
+    public locker(Object lock, int requests) {
+        this.lock = lock;
+        this.requests = requests;
+    }
+
+    public Object getLock() {
+        return lock;
+    }
+
+    public void setLock(Object lock) {
+        this.lock = lock;
+    }
+
+    public int getRequests() {
+        return requests;
+    }
+
+    public void setRequests(int requests) {
+        this.requests = requests;
     }
 }
