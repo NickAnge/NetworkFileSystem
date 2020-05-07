@@ -101,9 +101,10 @@ public class Application {
                         break;
                     }
                     int write = 0;
+                    in.nextLine();
                     System.out.print(RED_BOLD + "What do you want to write");
-                    String s = in.next();
-
+                    String s = in.nextLine();
+                    System.out.println(s);
                     write = client.myNfs_write(fdWrite,s,s.length());
 
                     if(write < 0){
@@ -121,9 +122,7 @@ public class Application {
                             break;
                         }
                     }
-                    if(fdseek == -1){
-                        break;
-                    }
+
                     System.out.print(RED_BOLD + "How many bytes: ");
                     int seek = 0;
                     int pos  = in.nextInt();
@@ -135,6 +134,22 @@ public class Application {
                     }
                     break;
                 case 5:
+                    int fdclose = -1;
+                    while(true){
+                        System.out.println(RED_BOLD + "Choose File descriptor");
+                        printfds(appfds);
+                        fdclose = in.nextInt();
+                        if(appfds.containsKey(fdclose) || fdclose == -1){
+                            break;
+                        }
+                    }
+                    if(fdclose == -1){
+                        break;
+                    }
+                    int close = client.myNfs_close(fdclose);
+                    if(close < 0){
+                        System.err.println("Error with close");
+                    }
                     break;
 
 
