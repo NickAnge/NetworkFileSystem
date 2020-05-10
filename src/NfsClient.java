@@ -3,7 +3,9 @@ import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
 import javax.swing.plaf.synth.SynthScrollBarUI;
 import javax.xml.crypto.Data;
 import java.io.*;
+import java.lang.instrument.Instrumentation;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.sql.ClientInfoStatus;
 import java.util.*;
 import java.util.jar.Attributes;
@@ -15,10 +17,10 @@ public class NfsClient implements   nfsAPI{
     private static final String max_capacity = "MAX_CAPACITY";
     public static final String NO_THIS_ID_READ = "DONT_KNOW_THIS_ID_READ";
     public static final String NO_THIS_ID_WRITE = "DONT_KNOW_THIS_ID_WRITE";
-
+    public  static final int MAX_UDP_PACKET_SIZE = 1024;
 
     private static final int ERROR = -2;
-    private int readInt,writeInt,openInt,openAck;
+    public int readInt,writeInt,openInt,openAck;
     private  ServerInfo server;
 //    ServerInfo nikos;
     private DatagramSocket udpSocket;
@@ -103,7 +105,6 @@ public class NfsClient implements   nfsAPI{
         clientThread = new Thread(new clientReceive());
         sendThread = new Thread(new clientSend());
 
-
         //first time
         filesInMiddleware = new HashMap<>();
     }
@@ -114,7 +115,15 @@ public class NfsClient implements   nfsAPI{
             this.server = new ServerInfo(InetAddress.getByName(ipaddr),port);
             System.out.println(server.getServerIp());
             this.udpSocket = new DatagramSocket();
-            this.cacheMemory = new CacheMemory(cacheBlocks, blockSize,freshT);
+            this.cacheMemory = new CacheMemory(blockSize,freshT);
+
+            for(int i =0; i < cacheBlocks; i++){
+                Block addBlock = new Block(blockSize);
+                cacheMemory.getCache().add(addBlock);
+            }
+
+            this.cacheMemory.setFreshT(freshT);
+
             sendThread.start();
             clientThread.start();
         } catch (UnknownHostException | SocketException e) {
@@ -179,7 +188,6 @@ public class NfsClient implements   nfsAPI{
 
                 clientLocks.put(openInt,locker);
 
-
                 return openInt;
             }
         }
@@ -233,7 +241,6 @@ public class NfsClient implements   nfsAPI{
     @Override
     public int myNfs_read(int fd, Msg buff, int n) {
 
-//
         System.out.println("requested fd" + fd);
 //        System.out.println("PosfromStart : " + middlewarefds.get(fd).getFd().getPosFromStart());
 //        System.out.println(middlewarefds.get(fd).getFd());
@@ -247,9 +254,7 @@ public class NfsClient implements   nfsAPI{
             return  ERROR;
         }
 
-        readInt++;
-
-        Msg msg = new Msg(null);
+//        readInt++;
 
         fileDescriptor filed = middlewarefds.get(fd);
 
@@ -260,28 +265,25 @@ public class NfsClient implements   nfsAPI{
         }
         fileAttributes attributes = file.getAttributes();
 
-        udpMessageRead readMsg = new udpMessageRead(read,readInt,filed,msg,n,attributes);
-        int req = clientLocks.get(fd).getRequests();
-        req++;
-        clientLocks.get(fd).setRequests(req);
-        requests.add(readMsg);
 
-        block2(clientLocks.get(fd));
-//        readWaiting = 1;
-//        block(readLock,read,readInt);
-//        readWaiting = 0;
+        udpMessageRead header = new udpMessageRead(read,n,readInt,filed,attributes);
+        int sizeHeader = getObjectSize(header);
+        
+        System.out.println("sizeHeader" + sizeHeader);
 
-        buff.setMsg(readMsgs.get(readInt).getReadMsg().msg);
+        int remainPacket = MAX_UDP_PACKET_SIZE - sizeHeader;
+
+        byte[] msg = remoteRead(fd,n,remainPacket,attributes);
+
+        buff.setMsg(msg);
         //remove from read messages when app takes them
-        System.out.println("wanted file read"+ readMsgs.get(readInt).getReadMsg().getMsg());
+        System.out.println("wanted file read"+ new String(buff.getMsg(), StandardCharsets.UTF_8));
 
-        readMsgs.remove(readInt);
-
-        return buff.getMsg().length(); // success
+        return buff.getMsg().length; // success
     }
 
     @Override
-    public int myNfs_write(int fd, String buff, int n) {
+    public int myNfs_write(int fd, Msg buff, int n) {
 
         System.out.println("requested fd" + fd);
         if(!middlewarefds.containsKey(fd)){
@@ -292,30 +294,25 @@ public class NfsClient implements   nfsAPI{
             return  ERROR;
         }
 
-        writeInt++;
-        Msg msg = new Msg(buff);
-
         fileDescriptor filed = middlewarefds.get(fd);
         fileInformation file = findFile(filed.getFd());
 
         if(file == null){
             return ERROR;
         }
+//        writeInt++;
         fileAttributes attributes = file.getAttributes();
-//
-        udpMessageWrite writeMsg = new udpMessageWrite("Write",writeInt,filed,msg.getMsg().length(),msg,attributes);
-//
-        requests.add(writeMsg);
-        int req = clientLocks.get(fd).getRequests();
-        req++;
-        clientLocks.get(fd).setRequests(req);
 
-        block2(clientLocks.get(fd));
-//        block(writeLock,write,writeInt);
+        udpMessageWrite header = new udpMessageWrite("Write",writeInt,filed,attributes);
 
-        System.out.println("Write completed");
+        int sizeHeader = getObjectSize(header);
+        System.out.println("sizeHeader" +sizeHeader);
+        int remainPacket = MAX_UDP_PACKET_SIZE - sizeHeader;
+        System.out.println("remainPacket" +remainPacket);
 
-        return 1;
+        int ret = remoteWrite(fd,buff,n,remainPacket,attributes);
+
+        return ret;
     }
 
     @Override
@@ -328,6 +325,16 @@ public class NfsClient implements   nfsAPI{
         }
 
 
+        fileInformation file = findFile(middlewarefds.get(fd).getFd());
+        if(currentTimeInSeconds() > file.getAttributes().getTimestampAttributes()){
+            openInt++;
+            udpMessageOpen newOpen = new udpMessageOpen(open,file.getFname(),file.getAttributes().getFlags(),openInt,file.getAttributes(),middlewarefds.get(fd));
+            requests.add(newOpen);
+            int req = clientLocks.get(fd).getRequests();
+            req++;
+            clientLocks.get(fd).setRequests(req);
+            block2(clientLocks.get(fd));
+        }
         int temp = -1;
         long newStart = -1;
 //
@@ -350,7 +357,7 @@ public class NfsClient implements   nfsAPI{
         else if (whence == SEEK_END) {
             temp = 1;
             //SEEK_END  The offset is set to the size of the file plus offset bytes.
-            fileInformation file = findFile(middlewarefds.get(fd).getFd());
+//            fileInformation file = findFile(middlewarefds.get(fd).getFd());
 
             System.out.println("SIZE: "+ file.getAttributes().getSize());
             System.out.println("OLD POSITION: "+ middlewarefds.get(fd).getPosFromStart());
@@ -376,6 +383,21 @@ public class NfsClient implements   nfsAPI{
         return 0;
     }
 
+    public static int  getObjectSize(udpMessage e){
+        ObjectOutputStream oos = null;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            oos = new ObjectOutputStream(baos);
+            oos.writeObject(e);
+        } catch (IOException ioException) {
+            ioException.printStackTrace();
+        }
+        byte[] byteMsg = baos.toByteArray();
+
+
+        return byteMsg.length;
+    }
+
     public void sendUdpMessage(udpMessage msg,int clientId){
 
         int send =0;
@@ -384,9 +406,14 @@ public class NfsClient implements   nfsAPI{
         try {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         oos = new ObjectOutputStream(baos);
+
         oos.writeObject(msg);
-        byte[] byteMsg = baos.toByteArray();
+        byte[] byteMsg = new byte[1024];
+        byteMsg = baos.toByteArray();
+
+
         DatagramPacket packet = new DatagramPacket(byteMsg, byteMsg.length,server.getServerIp(), server.port);
+        System.out.println("packet - length"+ packet.getLength());
         if(msg.getType().equals(read)){
             while(!idsMiddleware.get(msg.getType()).contains(clientId) && !idsMiddleware.get(max_capacity).contains(clientId) && !idsMiddleware.get(NO_THIS_ID_READ).contains(clientId)){
                 //resend packet until server answer
@@ -412,9 +439,123 @@ public class NfsClient implements   nfsAPI{
 
     }
 
+    public byte[] remoteRead(int fd,int n,int payload,fileAttributes attributes){
+        int repetition = 1;
+        String returnMsg = "";
+//        byte[] retMsg = new byte[n];
+        int realBytes = 0;
+        int start = 0;
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream( );
+
+        while(repetition  > 0){
+            System.out.println("before :"+ n);
+            int check = n / payload;
+            System.out.println("times" +check);
+
+            if(check > 0){
+                n = n - payload + 22;
+                realBytes = payload - 22;
+                System.out.println("n"+ n);
+                System.out.println("payload"+ realBytes);
+            }
+            else {
+                realBytes = n;
+                System.out.println("n"+ n);
+                System.out.println("payload"+ realBytes);
+                repetition = -1;
+            }
+            readInt++;
+
+            System.out.println("id "+ readInt);
+            fileDescriptor newfileId = middlewarefds.get(fd);
+
+            fileInformation file = findFile(newfileId.getFd());
+
+            System.out.println("SIZE"+ file.getAttributes().getSize());
+            System.out.println("POS"+ newfileId.getPosFromStart());
+
+            if(file.getAttributes().getSize() == newfileId.getPosFromStart()){
+                break;
+            }
+            udpMessageRead readMsg = new udpMessageRead(read,realBytes,readInt,newfileId,attributes);
+            int req = clientLocks.get(fd).getRequests();
+            req++;
+
+            clientLocks.get(fd).setRequests(req);
+
+            requests.add(readMsg);
+            block2(clientLocks.get(fd));
+
+            try {
+                System.out.println("size of byte array"+ readMsgs.get(readInt).getReadMsg().length);
+                outputStream.write(readMsgs.get(readInt).getReadMsg());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            readMsgs.remove(readInt);
+        }
+        return outputStream.toByteArray();
+    }
+
+    public int remoteWrite(int fd,Msg buff,int n,int payload,fileAttributes attributes){
+        int repetition = 1;
+        byte [] sendMsg ;
+        int returnBytes = 0;
+        int start = 0;
+        int end = 0;
+        int writeSize = 0;
+
+        while(repetition  > 0){
+            System.out.println("before n"+ n);
+
+            int check = n / payload;
+            System.out.println("times" +check);
+
+
+            if(check > 0){
+                n = n -payload+ 22;
+                end = end + payload -22;
+                System.out.println("end "+ end);
+
+                sendMsg = Arrays.copyOfRange(buff.getMsg(),start,end);
+
+                start = start + payload-22;
+                System.out.println("start"+ start);
+                System.out.println("payload"+ sendMsg.length);
+            }
+            else {
+                end = buff.getMsg().length;
+
+                sendMsg = Arrays.copyOfRange(buff.getMsg(),start,end);
+                System.out.println("n"+ n);
+                System.out.println("payload"+ sendMsg.length);
+                repetition = -1;
+            }
+            writeInt++;
+
+            fileDescriptor newfileId = middlewarefds.get(fd);
+
+            udpMessageWrite writeMsg = new udpMessageWrite(write,writeInt,newfileId,sendMsg,attributes);
+
+            int req = clientLocks.get(fd).getRequests();
+            req++;
+            clientLocks.get(fd).setRequests(req);
+
+            requests.add(writeMsg);
+            block2(clientLocks.get(fd));
+
+            returnBytes = returnBytes + sendMsg.length;
+        }
+
+
+        return returnBytes;
+    }
+
 
     public udpMessage receiveUdpMessages() {
-        byte[] buffer = new byte[1024];
+        byte[] buffer = new byte[MAX_UDP_PACKET_SIZE];
+
         try {
 //            System.out.println(server.getServerIp());
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length, server.getServerIp(), server.getPort());
@@ -454,7 +595,6 @@ public class NfsClient implements   nfsAPI{
                             System.out.println("FDr"+returnMsg.getFiled().getFd().getFd());
                             System.out.println("openid"+returnMsg.getOpenClientInt());
                             System.out.println("openid"+returnMsg.getOpenACK());
-
                             if(returnMsg.getFiled().getFd().getFd() > 0) {
                                 if (returnMsg.getFlags().contains(O_RDONLY)) {
                                     System.out.println("takes read permission");
@@ -469,12 +609,14 @@ public class NfsClient implements   nfsAPI{
 
                                 fileDescriptor newfd = new fileDescriptor(returnMsg.getFiled().getFd(),returnMsg.getOpenClientInt(),returnMsg.getFiled().getPosFromStart(),readPermission,writePerminssion);
 
-                                fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags());
+                                //give attributes a timestamp
+                                fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),currentTimeInSeconds() + cacheMemory.getFreshT());
 
                                 System.out.println("readPerm" + newfd.getReadPermission());
                                 System.out.println("writePerm" + newfd.getWritePermission());
 
                                 System.out.println("SIZE OF FILE" + attributes.getSize());
+                                System.out.println("Current time "+ attributes.getTimestampAttributes());
 
                                 middlewarefds.put(returnMsg.getOpenClientInt(),newfd);
 
@@ -490,6 +632,7 @@ public class NfsClient implements   nfsAPI{
                                     System.out.println("ID "+ newfd.getFd().getFd());
                                     System.out.println("Session" + newfd.getFd().getSession());
                                     System.out.println("openid" + newfd.getClientID());
+
 
                                 }
 
@@ -531,11 +674,12 @@ public class NfsClient implements   nfsAPI{
 //                            fileDescriptor newfd = new fileDescriptor(returnMsg.getFd().getFd(),returnMsg.getFd().getClientID(),returnMsg.getFd().getPosFromStart(),returnMsg.getFd().getReadPermission(),returnMsg.getFd().getWritePermission());
 //                            fileDescriptor newfd = new fileDescriptor(returnMsg.getFd().getFd(),returnMsg.getFd().getClientID(),returnMsg.getFd().getPosFromStart());
 
+                            //give attributes a timestamp
                             fileDescriptor newfd = middlewarefds.get(returnMsg.getFd().getClientID());
                             newfd.setPosFromStart(returnMsg.getFd().getPosFromStart());
 
 //                            //refresh file information to client after server-Msg returned
-                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags());
+                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),currentTimeInSeconds() + cacheMemory.getFreshT());
                             fileInformation file = findFile(returnMsg.getFd().getFd());
 //                            middlewarefds.put(newfd.getClientID(),newfd);
 
@@ -549,7 +693,7 @@ public class NfsClient implements   nfsAPI{
                             System.out.println("id " + newfd.getClientID());
                             System.out.println("posStart" + newfd.getPosFromStart());
                             System.out.println("SIZE OF FILE" + attributes.getSize());
-
+                            System.out.println("Current time "+ attributes.getTimestampAttributes());
                             readMsgs.put(returnMsg.getReadClientInt(),returnMsg);
 
                             int req = clientLocks.get(newfd.getClientID()).getRequests();
@@ -569,7 +713,7 @@ public class NfsClient implements   nfsAPI{
                             fileDescriptor newfd = middlewarefds.get(returnMsg.getFd().getClientID());
                             newfd.setPosFromStart(returnMsg.getFd().getPosFromStart());
 //                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize());
-                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags());
+                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),currentTimeInSeconds() + cacheMemory.getFreshT());
                             fileInformation file = findFile(returnMsg.getFd().getFd());
 
                             if(file == null){
@@ -583,6 +727,7 @@ public class NfsClient implements   nfsAPI{
                             System.out.println("id " + newfd.getClientID());
                             System.out.println("posStart" + newfd.getPosFromStart());
                             System.out.println("SIZE OF FILE" + attributes.getSize());
+                            System.out.println("Current time "+ attributes.getTimestampAttributes());
 
                             int req = clientLocks.get(newfd.getClientID()).getRequests();
                             req--;
@@ -823,5 +968,12 @@ public class NfsClient implements   nfsAPI{
         }
         //delete that request
         requests.remove(j);
+    }
+
+
+    public long currentTimeInSeconds(){
+        long time = System.currentTimeMillis()/1000;
+        System.out.println(System.currentTimeMillis()/1000);
+        return time;
     }
 }

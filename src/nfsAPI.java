@@ -21,7 +21,7 @@ public interface nfsAPI {
     int myNfs_init(String ipaddr,int port,int cacheBlocks,int blockSize,int freshT);
     int myNfs_open(String fName, ArrayList<Integer> flags);
     int myNfs_read(int fd, Msg buff,int n);
-    int myNfs_write(int fd,String buff ,int n);
+    int myNfs_write(int fd,Msg buff ,int n);
     int myNfs_seek(int fd ,int pos , int whence);
     int myNfs_close(int fd);
 

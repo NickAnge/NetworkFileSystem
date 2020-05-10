@@ -1,9 +1,11 @@
 import java.io.File;
 import java.io.Serializable;
+import java.lang.instrument.Instrumentation;
 import java.net.InetAddress;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 
 public class Buffers {
 
@@ -37,22 +39,28 @@ class ServerInfo {
 }
 //Cache Memory Informations
 class CacheMemory {
-    int cacheBlocks;
+    List<Block> cache;
+//    int cacheBlocks;
     double blockSize;
-    long freshT;
+    int freshT;
 
-    public CacheMemory(int cacheBlocks, double blockSize, long freshT) {
-        this.cacheBlocks = cacheBlocks;
+    public CacheMemory(double blockSize, int freshT) {
+        this.cache = new ArrayList<>();
         this.blockSize = blockSize;
         this.freshT = freshT;
     }
 
-    public int getCacheBlocks() {
-        return cacheBlocks;
+    public CacheMemory(int freshT) {
+        this.cache = new ArrayList<>();
+        this.freshT = freshT;
     }
 
-    public void setCacheBlocks(int cacheBlocks) {
-        this.cacheBlocks = cacheBlocks;
+    public List<Block> getCache() {
+        return cache;
+    }
+
+    public void setCache(List<Block> cache) {
+        this.cache = cache;
     }
 
     public double getBlockSize() {
@@ -63,11 +71,11 @@ class CacheMemory {
         this.blockSize = blockSize;
     }
 
-    public long getFreshT() {
+    public int getFreshT() {
         return freshT;
     }
 
-    public void setFreshT(long freshT) {
+    public void setFreshT(int freshT) {
         this.freshT = freshT;
     }
 }
@@ -91,46 +99,35 @@ class udpMessage implements Serializable {
 
 class udpMessageRead extends udpMessage implements Serializable{
     private double size; // how much we want to read
-    private Msg readMsg; // the msg
+//    private String readMsg; // the msg
     private int readClientInt; // the id for duplicates in client
+    private byte[] readMsg;
     private fileDescriptor fd; //information for this fd
 //    private  fileID idfd;
     private fileAttributes attributes; //size
 
-    public udpMessageRead(String type, int readClientInt, fileDescriptor fd,Msg readMsg, double size,fileAttributes attributes) {
+    public udpMessageRead(String type, double size, int readClientInt, fileDescriptor fd, fileAttributes attributes) {
         super(type);
         this.size = size;
         this.readClientInt = readClientInt;
         this.fd = fd;
-        this.readMsg = readMsg;
         this.attributes = attributes;
     }
 
-    public udpMessageRead(String type, double size, Msg readMsg, int readClientInt, fileDescriptor fd, fileID idfd, fileAttributes attributes) {
+    public udpMessageRead(String type, double size, int readClientInt, fileDescriptor fd) {
         super(type);
         this.size = size;
-        this.readMsg = readMsg;
         this.readClientInt = readClientInt;
         this.fd = fd;
-//        this.idfd = idfd;
-        this.attributes = attributes;
     }
 
-    public udpMessageRead(String type, Msg readMsg, int readClientInt, fileDescriptor fd, fileAttributes attributes) {
+    public udpMessageRead(String type, byte[] readMsg, int readClientInt, fileDescriptor fd, fileAttributes attributes) {
         super(type);
         this.readMsg = readMsg;
         this.readClientInt = readClientInt;
         this.fd = fd;
         this.attributes = attributes;
     }
-
-//    public fileID getIdfd() {
-//        return idfd;
-//    }
-//
-//    public void setIdfd(fileID idfd) {
-//        this.idfd = idfd;
-//    }
 
     public fileAttributes getAttributes() {
         return attributes;
@@ -140,11 +137,11 @@ class udpMessageRead extends udpMessage implements Serializable{
         this.attributes = attributes;
     }
 
-    public Msg getReadMsg() {
+    public byte[] getReadMsg() {
         return readMsg;
     }
 
-    public void setReadMsg(Msg readMsg) {
+    public void setReadMsg(byte[] readMsg) {
         this.readMsg = readMsg;
     }
 
@@ -248,32 +245,20 @@ class udpMessageOpen extends udpMessage implements Serializable{
     }
 }
 class udpMessageWrite extends udpMessage implements Serializable {
-    private double size;
-    private Msg writeMsg;
+    private byte[] writeMsg;
     private int writeClientInt;
     private fileDescriptor fd;
-//    private fileID idfd;
     private fileAttributes attributes;
 
-    public udpMessageWrite(String type, int writeClientInt, fileDescriptor fd, fileAttributes attributes) {
+    public udpMessageWrite(String type, int writeClientInt,fileDescriptor fd, fileAttributes attributes) {
         super(type);
         this.writeClientInt = writeClientInt;
         this.fd = fd;
         this.attributes = attributes;
     }
 
-    public udpMessageWrite(String type, double size, Msg writeMsg, int writeClientInt, fileDescriptor fd, fileAttributes attributes) {
+    public udpMessageWrite(String type, int clientId, fileDescriptor fd, byte[] writeMsg, fileAttributes attributes) {
         super(type);
-        this.size = size;
-        this.writeMsg = writeMsg;
-        this.writeClientInt = writeClientInt;
-        this.fd = fd;
-        this.attributes = attributes;
-    }
-
-    public udpMessageWrite(String type, int clientId, fileDescriptor fd, double size, Msg writeMsg, fileAttributes attributes) {
-        super(type);
-        this.size = size;
         this.writeClientInt = clientId;
         this.fd = fd;
         this.writeMsg = writeMsg;
@@ -287,19 +272,12 @@ class udpMessageWrite extends udpMessage implements Serializable {
         this.attributes = attributes;
     }
 
-    public double getSize() {
-        return size;
-    }
 
-    public void setSize(double size) {
-        this.size = size;
-    }
-
-    public Msg getWriteMsg() {
+    public byte[] getWriteMsg() {
         return writeMsg;
     }
 
-    public void setWriteMsg(Msg writeMsg) {
+    public void setWriteMsg(byte[] writeMsg) {
         this.writeMsg = writeMsg;
     }
 
@@ -372,17 +350,17 @@ class clientFileInformation implements Serializable {
     }
 }
 class Msg implements  Serializable{
-    String msg;
+    byte[] msg;
 
-    public Msg(String msg) {
+    public Msg(byte[] msg) {
         this.msg = msg;
     }
 
-    public String getMsg() {
+    public byte[] getMsg() {
         return msg;
     }
 
-    public void setMsg(String msg) {
+    public void setMsg(byte[] msg) {
         this.msg = msg;
     }
 }
@@ -460,10 +438,25 @@ class fileDescriptor implements  Serializable {
 class fileAttributes implements Serializable {
     long size;
     ArrayList<Integer>flags;
+    long timestampAttributes;
 
     public fileAttributes(long size, ArrayList<Integer> flags) {
         this.size = size;
         this.flags = flags;
+    }
+
+    public fileAttributes(long size, ArrayList<Integer> flags, long timestampAttributes) {
+        this.size = size;
+        this.flags = flags;
+        this.timestampAttributes = timestampAttributes;
+    }
+
+    public long getTimestampAttributes() {
+        return timestampAttributes;
+    }
+
+    public void setTimestampAttributes(long timestampAttributes) {
+        this.timestampAttributes = timestampAttributes;
     }
 
     public ArrayList<Integer> getFlags() {
@@ -670,5 +663,56 @@ class locker {
 
     public void setRequests(int requests) {
         this.requests = requests;
+    }
+}
+
+class InstrumentationAgent {
+    private static volatile Instrumentation globalInstrumentation;
+
+    public static void premain(final String agentArgs, final Instrumentation inst) {
+        globalInstrumentation = inst;
+    }
+
+    public static long getObjectSize(final Object object) {
+        if (globalInstrumentation == null) {
+            throw new IllegalStateException("Agent not initialized.");
+        }
+        return globalInstrumentation.getObjectSize(object);
+    }
+}
+
+class Block implements Serializable{
+    byte[] bytearray;
+    int hasInfo;
+    long blockTimeStamp;
+
+    public Block(int size) {
+        this.bytearray = new byte[size];
+        this.hasInfo = 0;
+        this.blockTimeStamp = 0;
+    }
+
+    public long getBlockTimeStamp() {
+        return blockTimeStamp;
+    }
+
+    public void setBlockTimeStamp(long blockTimeStamp) {
+        this.blockTimeStamp = blockTimeStamp;
+    }
+
+    public int getHasInfo() {
+        return hasInfo;
+    }
+
+    public void setHasInfo(int hasInfo) {
+        this.hasInfo = hasInfo;
+    }
+
+    public byte[] getBytearray() {
+        return bytearray;
+    }
+
+    public void setBytearray(byte[] bytearray) {
+        this.bytearray = bytearray;
     }
 }

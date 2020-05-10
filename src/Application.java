@@ -11,16 +11,20 @@ public class Application {
     public static final String RESET = "\033[0m";  // Text Reset
     public static final String RED = "\033[0;31m";     // RED
     public static final String GREEN_BOLD = "\033[1;32m";  // GREEN
+    public static HashMap<Integer,String> appfds = new HashMap<>();
+    public  static Scanner in = new Scanner(System.in);
+    public static NfsClient client = new NfsClient();
 
     public static void main(String[] args) {
-        NfsClient client = new NfsClient();
+//        NfsClient client = new NfsClient();
 //        EnumSet<Flag> flag = null;
 
-        client.myNfs_init("192.168.2.2",4001,0,0,0);
+        client.myNfs_init("192.168.2.2",4001,0,0,10);
 
-        Scanner in = new Scanner(System.in);
-        HashMap<Integer,String> appfds = new HashMap<>();
+//        Scanner in = new Scanner(System.in);
+//        HashMap<Integer,String> appfds = new HashMap<>();
 
+        client.currentTimeInSeconds();
         while(true){
             System.out.println(RED_BOLD + "MENU: ");
             System.out.println(RED_BOLD + "    1) Open:");
@@ -63,28 +67,16 @@ public class Application {
 
                     break;
                 case 2:
-                    int fd = -1;
-                    while(true){
-                        System.out.println(RED_BOLD + "Choose File descriptor");
-                        printfds(appfds);
-                        fd = in.nextInt();
-                        if(appfds.containsKey(fd) || fd == -1){
-                            break;
-                        }
-                    }
-                    if(fd == -1){
+
+                    Msg check = read();
+                    if(check == null){
+                        System.err.println(RED + "Read returned an error");
                         break;
                     }
+                    int writeInt = write(check);
 
-                    System.out.print(RED_BOLD + "How many bytes: ");
-                    int read = 0;
-
-                    int bytes  = in.nextInt();
-                    String b = null;
-                    Msg msg = new Msg(b);
-                    read = client.myNfs_read(fd,msg, bytes);
-                    if(read < 0 ){
-                        System.err.println(RED + "Read returned an error");
+                    if(writeInt < 0 ){
+                        System.err.println(RED + "Write returned an error");
                     }
                     break;
                 case 3:
@@ -104,11 +96,12 @@ public class Application {
                     in.nextLine();
                     System.out.print(RED_BOLD + "What do you want to write");
                     String s = in.nextLine();
+                    Msg buff = new Msg(s.getBytes());
                     System.out.println(s);
-                    write = client.myNfs_write(fdWrite,s,s.length());
+                    write = client.myNfs_write(fdWrite,buff,s.length());
 
                     if(write < 0){
-                        System.err.println("Error with write");
+                        System.err.println(RED_BOLD  + "Error with write");
 
                     }
                     break;
@@ -165,6 +158,71 @@ public class Application {
         for(Integer temp : keys){
             System.out.println( GREEN_BOLD+ "File Descriptor:" + temp + " (Filename: " + appFds.get(temp) + ")");
         }
+    }
+
+    public static int write(Msg buff){
+        int fdWrite = -1;
+        while(true){
+            System.out.println(RED_BOLD + "Choose File descriptor");
+            printfds(appfds);
+            fdWrite = in.nextInt();
+            if(appfds.containsKey(fdWrite) || fdWrite == -1){
+                break;
+            }
+        }
+        if(fdWrite == -1){
+            return -1;
+        }
+        int write = 0;
+        in.nextLine();
+        if(buff == null){
+            System.out.print(RED_BOLD + "What do you want to write");
+            String s = in.nextLine();
+            buff = new Msg(s.getBytes());
+            System.out.println(s);
+        }
+
+        write = client.myNfs_write(fdWrite,buff,buff.msg.length);
+
+        if(write < 0){
+            System.err.println("Error with write");
+        }
+        return write;
+    }
+
+    public static Msg read(){
+        int fd = -1;
+
+        while(true){
+            System.out.println(RED_BOLD + "Choose File descriptor");
+            printfds(appfds);
+            fd = in.nextInt();
+            if(appfds.containsKey(fd) || fd == -1){
+                break;
+            }
+        }
+        if(fd == -1){
+            return null;
+        }
+        System.out.print(RED_BOLD + "How many bytes: ");
+        int read = 0;
+
+        int bytes  = in.nextInt();
+
+        byte [] bytesMsg = new byte[bytes];
+
+        Msg msg = new Msg(bytesMsg);
+
+        read = client.myNfs_read(fd,msg, bytes);
+
+        if(read < 0 ){
+            System.err.println(RED + "Read returned an error");
+            return null;
+        }
+
+        System.out.println("Bytes"+ msg.getMsg().length);
+
+        return msg;
     }
 
 

@@ -1,4 +1,6 @@
 
+import org.omg.CORBA.ObjectHelper;
+
 import java.io.*;
 import java.net.*;
 import java.nio.ByteBuffer;
@@ -147,6 +149,7 @@ public class NfsServer {
 //                    fileDescriptor fd = new fileDescriptor(newfd,openMsg.getOpenClientInt(),openMsg.getFiled().getPosFromStart());
                     openMsg.getFiled().setFd(newfd);
                     ArrayList<Integer>flags = takeFlags(newFile);
+                    System.out.println("SIZE" + newFile.length());
                     fileAttributes attributes = new fileAttributes(newFile.length(),flags);
 
                     if(nextId > ids) {
@@ -159,19 +162,15 @@ public class NfsServer {
 //                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
 
                     }
-                    else if(openMsg.getFlags().contains(O_TRUNC)){
+                    else if(openMsg.getFlags().contains(O_TRUNC) && nextId >=0){
                         Set<StandardOpenOption> ops = new TreeSet<>();
                         ops.add(StandardOpenOption.TRUNCATE_EXISTING);
                         FileChannel fdnew = FileChannel.open(Paths.get(newFile.getPath()),ops);
-
                         filesInServer.get(newfd).setFd(fdnew);
 //                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
 
                     }
-                    else {
-                        attributes.setSize(0);
-//                        openMsg.getAttributes().setSize(0);
-                    }
+
 
                     udpMessageOpen serverAnswer = new udpMessageOpen("Open",openMsg.getFlags(),openMsg.getOpenACK(),openMsg.getFiled().getClientID(),attributes,openMsg.getFiled());
 //                    try {
@@ -202,14 +201,17 @@ public class NfsServer {
 
                     currentChannel.position(readMsg.getFd().getPosFromStart());
 
-//                    if(readMsg)
                     int size = 0;
-                    if(readMsg.getSize() > 1024){
-                        size = 1024;
+//
+
+                    if((readMsg.getSize() + readMsg.getFd().getPosFromStart()) > currentChannel.size()){
+                        size = (int) (currentChannel.size() - readMsg.getFd().getPosFromStart());
                     }
                     else {
-                        size = (int) readMsg.getSize();
+                        size = (int)readMsg.getSize();
                     }
+
+                    System.out.println("SIze"+ size);
                     ByteBuffer byteBuffer = ByteBuffer.allocate(size);
 
                     long read = currentChannel.read(new ByteBuffer[]{byteBuffer});
@@ -218,16 +220,30 @@ public class NfsServer {
                         System.out.println("PROblem" + read);
                     }
 
-                   String s = new String(byteBuffer.array(), StandardCharsets.UTF_8);
-                   System.out.println(s);
-                   readMsg.getAttributes().setSize(filesInServer.get(check).getFile().length());
-                   Msg msg = new Msg(s);
-                   readMsg.setReadMsg(msg);
+                    byte[] m = byteBuffer.array();
+                    System.out.println("SIze of bytearray"+ m.length);
+                    String s = new String(byteBuffer.array(), StandardCharsets.UTF_8);
 
-                   readMsg.getFd().setPosFromStart(currentChannel.position());
+                    System.out.println(s.length());
 
-                   fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize());
-                   udpMessageRead serverAnswer = new udpMessageRead("Read",msg,readMsg.getReadClientInt(),readMsg.getFd(),attributes);
+                    readMsg.getAttributes().setSize(filesInServer.get(check).getFile().length());
+//                   Msg msg = new Msg(s);
+                    readMsg.setReadMsg(byteBuffer.array());
+
+                    readMsg.getFd().setPosFromStart(currentChannel.position());
+
+                    fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize());
+
+                    System.out.println("SIZE 1 " + "Read".length());
+                    System.out.println("SIZE 2 " + getObjectSize(readMsg.getReadClientInt()));
+                    System.out.println("SIZE 3 " + s);
+                    System.out.println("SIZE 4 " + getObjectSize(readMsg.getFd()));
+                    System.out.println("SIZE 5 " + getObjectSize(attributes));
+
+
+                    udpMessageRead serverAnswer = new udpMessageRead("Read",m,readMsg.getReadClientInt(),readMsg.getFd(),attributes);
+
+                   System.out.println("read size"+ getObjectSize(serverAnswer));
 
                    sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
                 }
@@ -252,19 +268,17 @@ public class NfsServer {
                     writeChannel.position(writeΜsg.getFd().getPosFromStart());
 //                    writeChannel.position(100);
                     int size = 0;
-                    if(writeΜsg.getSize() > 1024){
-                        size = 1024;
-                    }
-                    else {
-                        size = (int) writeΜsg.getSize();
-                    }
-                    ByteBuffer byteBuffer = ByteBuffer.wrap(writeΜsg.getWriteMsg().getMsg().getBytes());
+
+//
+//                    size = (int) writeΜsg.getSize();
 
 
-                    long read = writeChannel.write(new ByteBuffer[]{byteBuffer});
+                    ByteBuffer byteBuffer = ByteBuffer.wrap(writeΜsg.getWriteMsg());
 
-                    if (read <= 0) {
-                        System.out.println("PROblem" + read);
+                    long write = writeChannel.write(new ByteBuffer[]{byteBuffer});
+
+                    if (write <= 0) {
+                        System.out.println("PROblem" + write);
                     }
 
                     writeΜsg.getAttributes().setSize(writeChannel.size());
@@ -272,8 +286,6 @@ public class NfsServer {
 
                     udpMessageWrite retMsg = new udpMessageWrite("Write",writeΜsg.getWriteClientInt(),writeΜsg.getFd(),writeΜsg.getAttributes());
                     sendUdpMessage(retMsg,packet.getAddress(),packet.getPort());
-//
-
                 }
 
             } catch (UnknownHostException e) {
@@ -299,77 +311,6 @@ public class NfsServer {
         fileID newfd = new fileID(id,session);
         return  newfd;
     }
-    public static String readFunc(long start,long end,FileInputStream read){
-        byte[] byteBuffer = new byte[1024];
-        String ret = "";
-        long temp =  end-start;
-        int readbytes = 0;
-        try {
-            read.skip(start);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        while(temp > 0){
-
-            System.out.println(temp);
-            long temp2 = temp - 1024;
-            if(temp2 <= 0){
-                readbytes = readbytes + (int)temp;
-                temp =  0;
-//                start = start + (int)temp;
-            }
-            else {
-                temp = temp - 1024;
-                readbytes = readbytes + 1024;
-//                start = start + 1024;
-            }
-            try {
-                read.read(byteBuffer,0,readbytes);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            ret = ret + new String(byteBuffer,StandardCharsets.UTF_8);
-        }
-        return ret;
-    }
-//    public static long fileId(File newFile){
-//
-//        Long inode = null;
-//        try {
-//            inode = (Long) Files.getAttribute(newFile.toPath(), "unix:ino");
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-//
-////        long fileKey = (long) attr.fileKey();
-//
-//
-//        return inode;
-//    }
-//    public static File[] sortingFilesOfDirectory(File directory) {
-//        File[] files = directory.listFiles();
-//        assert files != null;
-//        Arrays.sort(files, new Comparator<File>() {
-//            public int compare(File f1, File f2) {
-//                long l1 = fileId(f1);
-//                long l2 = fileId(f2);
-//                return Long.valueOf(l1).compareTo(l2);
-//            }
-//        });
-//
-//        return files;
-//    }
-//    public static  long getFileCreation(File f1){
-//        try {
-//            BasicFileAttributes attr = Files.readAttributes(f1.toPath(),
-//                    BasicFileAttributes.class);
-//            return attr.creationTime()
-//                    .toInstant().toEpochMilli();
-//        } catch (IOException e) {
-//            throw new RuntimeException(f1.getAbsolutePath(), e);
-//        }
-//    }
     public static String checkMessageType(udpMessage msg){
 
         if(msg.getType().equals("Open")){
@@ -450,7 +391,6 @@ public class NfsServer {
 
         return -1;
     }
-
 
     public static int fillAccessMode(udpMessageOpen openMsg,HashMap<fileID,serversFdsInfo> fds,File newFile,int lastID){
         int nextId = -2;
@@ -658,5 +598,33 @@ public class NfsServer {
 
         return null;
     }
+    public static int  getObjectSize(udpMessage e){
+        ObjectOutputStream oos = null;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            oos = new ObjectOutputStream(baos);
+            oos.writeObject(e);
+        } catch (IOException ioException) {
+            ioException.printStackTrace();
+        }
+        byte[] byteMsg = baos.toByteArray();
 
+
+        return byteMsg.length;
+    }
+
+    public static int  getObjectSize(Object e){
+        ObjectOutputStream oos = null;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            oos = new ObjectOutputStream(baos);
+            oos.writeObject(e);
+        } catch (IOException ioException) {
+            ioException.printStackTrace();
+        }
+        byte[] byteMsg = baos.toByteArray();
+
+
+        return byteMsg.length;
+    }
 }
