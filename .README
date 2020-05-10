@@ -50,8 +50,6 @@ filesInServer
 for incoming msgs from server(read,write,open)
 [x] readMsgs
   [x] Delete them when application takes them
-[] writeMsgs
-  [] DElete them ...
 
 for requests
 [x] requests
@@ -98,22 +96,32 @@ API
      [] open->write->open the same file (for read too)
 
 3)[] read
+     [x] fragmented teh packet if the requested size is bigger than the udp size
+
      [x] send specific starting byte and receive next starting byte after read for this specific file descriptor
-     [x] 2/more clients read at the smae file
-     [x] check file descriptor fields
      [x] if appplication unblock and his request is not proecessed -->> lock again
      [x] must return the readMsg to application somehow;
      [x] check if wanted read starting byte is too long
      [x] if server hasnt this fileID send back to client an answer with the obligation to client to send a new open request for a new ID
      [x] this newID is used for new communication with server
-     []
 
      TESTS
      [] 2 or more apps read from the same big file
      [] one applications reads andd then open a new fd and read again.
-     []
 4)[] write
-
+    [x] fragmented files are sended one by one with max payload (adjust payload with header sended each time)
+    [x] packet
+        header
+        [x] writeInt : ack for client receive
+        [x]  type : write
+        [x]  fileDescriptor:
+               [x] fileID: communicates with client-server(id + session)
+               [x] writePermission
+               [x] readPermission
+               [x] clientId: communicates with app-client
+        [x]Payload:
+            String msg
+    [x]
 
 5)[x] seek
        [x] SEEK_SET The offset is set to offset bytes.
@@ -125,7 +133,6 @@ API
       [] Remove from application this fd
 
 Request-reply Protocol
-
 1) [] Choose request-reply protocol
     [x] Duplicates client side
         [x] idsMiddleware Buffer
@@ -133,11 +140,11 @@ Request-reply Protocol
     [x] Resend until receive
 
 Functionalities
-1)[] Εντοπισμός/δημιουργεία ενος αρχείου και λήψη του εσωτερικού αναγνωριστικού
+1)[χ] Εντοπισμός/δημιουργεία ενος αρχείου και λήψη του εσωτερικού αναγνωριστικού
        [x] send information to server(fname,flags)
        [x] server receive the request and prepares an integer id for the fname;
-            [] based on the session and the new id
-                []session is the number specific for this run of the seerver if error occurs, new session number aftter renboot
+            [χ] based on the session and the new id
+                [χ]session is the number specific for this run of the seerver if error occurs, new session number after reboot
             [x] gives an id to each filedescripto
             [x] return an error -1 if (O_CREAT | O_EXCL)
                 [x] or wrong flags
@@ -166,22 +173,39 @@ Functionalities
       [x] check if this file descriptor has write permission
       [x] writeInt++
       [x] creat udpMessageWrite and add it to requests
-      [] block or not block ??????
-      [] when client-middleware wants sends this message too server
-      [] client is receivinve the server answer for new fd infos and add them
+      [x] block
+      [x] when client-middleware wants sends this message too server
+      [χ] client is receivinve the server answer for new fd infos and add them
       [] overwrite data if there is .
 
 
 Server
-Open
+Open:
+    [x] check if the requested fileName is already opened
+        [x] if it is not  we check if we can opene it ..with maximum file descriptors size
+            [x] if we cant we return
+            [x] if we can
+                [x] we craete a new fileid(ID and sessio)
+                [x] we create a new file channel
+                [x] we create the udpAnsewr("Open",openMsg.getFlags(),openMsg.getOpenACK(),openMsg.getFiled().getClientID(),attributes,openMsg.getFiled()))
+        [x] if it is we return this fileChannel
+    [x] we return the id based on the flags(O_EXCL : if exist  return error)
+Read:
+    []checkk if this fileId exists
+        [] if its not sends an udpNoIdRead(type,xtpye,fileDescriptor)
+        [] so this client will ask for open request
+    []else we take the file descriptor, position him at wnated pos
+    []read
+    []sends read butes
+Write:
+     []checkk if this fileId exists
+            [] if its not sends an udpNoIdWritte(type,xtpye,fileDescriptor)
+            [] so this client will ask for open request
+        []else we take the file descriptor, position him at wanted pos
+        []
+]Max_CAPACITY:
     []
-Read
+NO_ID_READ:
     []
-Write
-    []
-Max_CAPACITY
-    []
-NO_ID_READ
-    []
-NO_ID_WRITE
+NO_ID_WRITE:
     []
