@@ -209,3 +209,19 @@ NO_ID_READ:
     []
 NO_ID_WRITE:
     []
+
+
+SECOND PART---> CACHE
+Structure
+
+Cache {
+    LinkedList<Blocks>
+    size = sizeOfcache ?
+    freshT = Χρόνος φρεσκάδασ σε seconds
+}
+
+Blocks {
+    byte [] = new byte[sizeOfBlock]
+
+    size = sizeOf block ?
+}
