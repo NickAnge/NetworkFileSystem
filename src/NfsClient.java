@@ -266,16 +266,20 @@ public class NfsClient implements   nfsAPI{
         fileAttributes attributes = file.getAttributes();
 
 
-        udpMessageRead header = new udpMessageRead(read,n,readInt,filed,attributes);
+        //how many bytes
+        int readBytes = checkBytes(n);
+        System.out.println("nnnn"+ readBytes);
+        udpMessageRead header = new udpMessageRead(read,readBytes,readInt,filed,attributes);
+
         int sizeHeader = getObjectSize(header);
-        
         System.out.println("sizeHeader" + sizeHeader);
 
         int remainPacket = MAX_UDP_PACKET_SIZE - sizeHeader;
 
-        byte[] msg = remoteRead(fd,n,remainPacket,attributes);
+        byte[] msg = remoteRead(fd,readBytes,remainPacket,attributes);
 
         buff.setMsg(msg);
+
         //remove from read messages when app takes them
         System.out.println("wanted file read"+ new String(buff.getMsg(), StandardCharsets.UTF_8));
 
@@ -487,6 +491,7 @@ public class NfsClient implements   nfsAPI{
             requests.add(readMsg);
             block2(clientLocks.get(fd));
 
+            printfCache();
             try {
                 System.out.println("size of byte array"+ readMsgs.get(readInt).getReadMsg().length);
                 outputStream.write(readMsgs.get(readInt).getReadMsg());
@@ -671,15 +676,13 @@ public class NfsClient implements   nfsAPI{
 //                            System.out.println("READ"+returnMsg.getFd().getReadPermission());
 //                            System.out.println("WRITE"+returnMsg.getFd().getWritePermission());
 
-//                            fileDescriptor newfd = new fileDescriptor(returnMsg.getFd().getFd(),returnMsg.getFd().getClientID(),returnMsg.getFd().getPosFromStart(),returnMsg.getFd().getReadPermission(),returnMsg.getFd().getWritePermission());
-//                            fileDescriptor newfd = new fileDescriptor(returnMsg.getFd().getFd(),returnMsg.getFd().getClientID(),returnMsg.getFd().getPosFromStart());
-
                             //give attributes a timestamp
                             fileDescriptor newfd = middlewarefds.get(returnMsg.getFd().getClientID());
                             newfd.setPosFromStart(returnMsg.getFd().getPosFromStart());
 
+                            long time = currentTimeInSeconds() + cacheMemory.freshT;
 //                            //refresh file information to client after server-Msg returned
-                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),currentTimeInSeconds() + cacheMemory.getFreshT());
+                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),time);
                             fileInformation file = findFile(returnMsg.getFd().getFd());
 //                            middlewarefds.put(newfd.getClientID(),newfd);
 
@@ -694,8 +697,16 @@ public class NfsClient implements   nfsAPI{
                             System.out.println("posStart" + newfd.getPosFromStart());
                             System.out.println("SIZE OF FILE" + attributes.getSize());
                             System.out.println("Current time "+ attributes.getTimestampAttributes());
+                            System.out.println("Modification time" + returnMsg.getAttributes().getModificationTime());
+                            System.out.println("INSERT CACHE");
+                            if(cacheMemory.getCache().size()> 0){
+                                int insertCache = insertCache(returnMsg.getReadMsg(),newfd.getPosFromStart() - returnMsg.getReadMsg().length,newfd.getPosFromStart()-1,time,returnMsg.getAttributes().getModificationTime(),newfd.getFd());
+
+                            }
+
                             readMsgs.put(returnMsg.getReadClientInt(),returnMsg);
 
+                            /// cache
                             int req = clientLocks.get(newfd.getClientID()).getRequests();
                             req--;
                             clientLocks.get(newfd.getClientID()).setRequests(req);
@@ -708,12 +719,12 @@ public class NfsClient implements   nfsAPI{
                             System.out.println("Added write client ID");
 //
                             idsMiddleware.get(returnMsg.getType()).add(returnMsg.getWriteClientInt());
-//
+                            long time = currentTimeInSeconds() + cacheMemory.freshT;
 //                            fileDescriptor newfd = new fileDescriptor(returnMsg.getFd().getFd(),returnMsg.getWriteClientInt(),returnMsg.getFd().getPosFromStart(),returnMsg.getFd().getReadPermission(),returnMsg.getFd().getWritePermission());
                             fileDescriptor newfd = middlewarefds.get(returnMsg.getFd().getClientID());
                             newfd.setPosFromStart(returnMsg.getFd().getPosFromStart());
 //                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize());
-                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),currentTimeInSeconds() + cacheMemory.getFreshT());
+                            fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),time);
                             fileInformation file = findFile(returnMsg.getFd().getFd());
 
                             if(file == null){
@@ -975,5 +986,199 @@ public class NfsClient implements   nfsAPI{
         long time = System.currentTimeMillis()/1000;
         System.out.println(System.currentTimeMillis()/1000);
         return time;
+    }
+    public  int checkBytes(int n) {
+        int max_size_of = cacheMemory.getBlockSize()*cacheMemory.getCache().size();
+
+        if(max_size_of > n){
+            int k = n/cacheMemory.getBlockSize();
+            if( (k*cacheMemory.getBlockSize()) == n){
+                return n;
+            }
+            else {
+                return (k+1)*cacheMemory.getBlockSize();
+            }
+
+        }
+        return  n;
+    }
+
+
+    public int insertCache(byte[] data,long start,long end,long timestamp,long modificationStamp,fileID fileID){
+        int j = -1;
+        int sizeOfdata = data.length;
+        int inserted = -1;
+        System.out.println("before start"+start);
+        System.out.println("before end"+end);
+        int startData = 0;
+        int newEnd = 0;
+        for(int i =0; i < cacheMemory.getCache().size();i++){
+            System.out.println("BLOCK +" +i);
+            System.out.println("data lenget" + sizeOfdata);
+            System.out.println("info"+cacheMemory.getCache().get(i).getHasInfo());
+            if(cacheMemory.getCache().get(i).getHasInfo() == 0){
+                System.out.println("Add new Block");
+                System.out.println("fileInfo" + fileID);
+                System.out.println("start"+ start);
+                System.out.println("end " + (cacheMemory.getBlockSize() - 1 + start));
+                System.out.println("timestamp" + timestamp);
+                System.out.println("modificationTIme" + modificationStamp);
+
+                inserted = 1;
+                cacheMemory.getCache().get(i).setHasInfo(1);
+
+                if(cacheMemory.blockSize > sizeOfdata){
+                    newEnd = (int) startData + sizeOfdata;
+                    end = start + sizeOfdata - 1;
+                }
+                else{
+                    newEnd = (int) (cacheMemory.getBlockSize() + startData);
+                    end = start+cacheMemory.getBlockSize() - 1;
+                }
+                System.out.println("NEw end"+ newEnd);
+                System.out.println("NEW START" + startData);
+
+                byte[] refresh = Arrays.copyOfRange(data, (int) startData, newEnd);
+
+                cacheMemory.getCache().get(i).setBytearray(refresh);
+                cacheMemory.getCache().get(i).setFileInfo(fileID);
+                cacheMemory.getCache().get(i).setStart(start);
+                cacheMemory.getCache().get(i).setEnd(end );
+                cacheMemory.getCache().get(i).setHasInfo(1);
+                refreshTimestamps(cacheMemory.getCache().get(i),timestamp,modificationStamp);
+                System.out.println("data lenget" + data.length);
+                sizeOfdata = sizeOfdata - cacheMemory.getBlockSize();
+                //gia to data array
+                startData = startData + cacheMemory.getBlockSize();
+                //gia to byte start
+                start = start + cacheMemory.getBlockSize();
+                if(sizeOfdata <=0){
+                    break;
+                }
+                continue;
+            }
+            if(cacheMemory.getCache().get(i).getFileInfo().equals(fileID)) {
+                long startBlock = cacheMemory.getCache().get(i).getStart();
+                long endBlock = cacheMemory.getCache().get(i).getEnd();
+                System.out.println("start second if :"+ start);
+                System.out.println("END"+ cacheMemory.getCache().get(i).getEnd());
+                System.out.println("start " +cacheMemory.getCache().get(i).getStart());
+                if (startBlock <= start && endBlock >= start) {
+                    inserted = 1;
+                    if(cacheMemory.blockSize > sizeOfdata){
+                        newEnd = (int)startData + sizeOfdata;
+                        end = start + sizeOfdata - 1;
+                    }
+                    else{
+                        end = start+cacheMemory.getBlockSize() -1;
+                        newEnd = (int) (cacheMemory.getBlockSize()+ startData);
+                    }
+                    System.out.println("NEw end"+ newEnd);
+                    System.out.println("STARt" + startData);
+
+                    byte[] refresh = Arrays.copyOfRange(data, startData, newEnd);
+                    cacheMemory.getCache().get(i).setHasInfo(1);
+                    cacheMemory.getCache().get(i).setStart(start);
+                    cacheMemory.getCache().get(i).setEnd(end);
+                    cacheMemory.getCache().get(i).setBytearray(refresh);
+                    refreshTimestamps(cacheMemory.getCache().get(i), timestamp, modificationStamp);
+                    sizeOfdata = sizeOfdata - cacheMemory.getBlockSize();
+                    //gia to byte start
+                    start = start + cacheMemory.getBlockSize();
+                    //gia to array data start
+                    startData = startData + cacheMemory.getBlockSize();
+                    System.out.println("Add new Block");
+                    System.out.println("fileInfo" + fileID);
+                    System.out.println("start"+ cacheMemory.getCache().get(i).getStart());
+                    System.out.println("end " + cacheMemory.getCache().get(i).getEnd());
+                    System.out.println("timestamp" +cacheMemory.getCache().get(i).getBlockTimeStamp());
+                    System.out.println("modificationTIme" +cacheMemory.getCache().get(i).getModificationStamp());
+
+                    if (sizeOfdata <= 0) {
+                        break;
+                    }
+                    i=-1;
+//                    try {
+////                        inserted =1 ;
+////                        outputStream.write(refresh);
+////                        cacheMemory.getCache().get(i).setBytearray(outputStream.toByteArray());
+////                        outputStream.flush();
+//                        refreshTimestamps(cacheMemory.getCache().get(i), timestamp, modificationStamp);
+//                        sizeOfdata = sizeOfdata - cacheMemory.getBlockSize();
+//                        start = start + refresh.length;
+////                        System.out.println("");
+//
+//
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+                }
+            }
+        }
+
+        if(sizeOfdata > 0 && inserted < 0){
+            int manyBlocks = (int) (sizeOfdata)/cacheMemory.getBlockSize();
+            if (manyBlocks > cacheMemory.getCache().size()){
+                manyBlocks = cacheMemory.getCache().size();
+            }
+
+            System.out.println("HOw many blocks "+ manyBlocks);
+            ArrayList<Integer> listOfBlocks = new ArrayList<>();
+            int l = -1;
+
+            long min = cacheMemory.getCache().get(0).getBlockTimeStamp();
+            while(true){
+                for(int i =0;i < cacheMemory.getCache().size() ;i++) {
+                    if (cacheMemory.getCache().get(i).getBlockTimeStamp() <= min) {
+                        min = cacheMemory.getCache().get(i).getBlockTimeStamp();
+                        l = i;
+                    }
+                }
+                listOfBlocks.add(l);
+                if(listOfBlocks.size() == manyBlocks){
+                    break;
+                }
+            }
+            for(int k = 0; k < listOfBlocks.size(); k++){
+                if(cacheMemory.blockSize > sizeOfdata){
+                    newEnd = (int)startData + sizeOfdata;
+                    end = start + sizeOfdata-1;
+
+                }
+                else{
+                    end = start + cacheMemory.getBlockSize() -1;
+                    newEnd = (int) (cacheMemory.getBlockSize()+ startData);
+                }
+                System.out.println("NEw end"+ newEnd);
+                System.out.println("STARt" + startData + k);
+
+                byte[] refresh = Arrays.copyOfRange(data, (int) startData, newEnd);
+                cacheMemory.getCache().get(listOfBlocks.get(k)).setBytearray(refresh);
+                cacheMemory.getCache().get(listOfBlocks.get(k)).setHasInfo(1);
+                cacheMemory.getCache().get(listOfBlocks.get(k)).setFileInfo(fileID);
+                cacheMemory.getCache().get(listOfBlocks.get(k)).setStart(start);
+                cacheMemory.getCache().get(listOfBlocks.get(k)).setEnd(end);
+                refreshTimestamps(cacheMemory.getCache().get(listOfBlocks.get(k)),timestamp,modificationStamp);
+                startData = startData + cacheMemory.getBlockSize();
+                start = start + cacheMemory.getBlockSize();
+            }
+        }
+        return 1;
+    }
+
+
+    public void printfCache(){
+        for(int i = 0;i < cacheMemory.getCache().size();i++){
+            System.out.println("BLOCK "+i);
+            System.out.println("bytearray " + new String(cacheMemory.getCache().get(i).getBytearray(),StandardCharsets.UTF_8));
+            System.out.println("Start :" +cacheMemory.getCache().get(i).getStart());
+            System.out.println("END :" +cacheMemory.getCache().get(i).getEnd());
+            System.out.println("Time :" +cacheMemory.getCache().get(i).getBlockTimeStamp());
+            System.out.println("MOdifTime :" +cacheMemory.getCache().get(i).getModificationStamp());
+        }
+    }
+    public void refreshTimestamps(Block block,long timestamp,long modificationtimestamp){
+        block.setModificationStamp(modificationtimestamp);
+        block.setBlockTimeStamp(timestamp);
     }
 }

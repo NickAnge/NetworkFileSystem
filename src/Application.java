@@ -19,7 +19,7 @@ public class Application {
 //        NfsClient client = new NfsClient();
 //        EnumSet<Flag> flag = null;
 
-        client.myNfs_init("192.168.2.2",4001,0,0,10);
+        client.myNfs_init("192.168.2.2",4001,3,5,10);
 
 //        Scanner in = new Scanner(System.in);
 //        HashMap<Integer,String> appfds = new HashMap<>();
@@ -73,11 +73,11 @@ public class Application {
                         System.err.println(RED + "Read returned an error");
                         break;
                     }
-                    int writeInt = write(check);
-
-                    if(writeInt < 0 ){
-                        System.err.println(RED + "Write returned an error");
-                    }
+//                    int writeInt = write(check);
+//
+//                    if(writeInt < 0 ){
+//                        System.err.println(RED + "Write returned an error");
+//                    }
                     break;
                 case 3:
                     int fdWrite = -1;

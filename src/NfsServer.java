@@ -151,7 +151,7 @@ public class NfsServer {
                     ArrayList<Integer>flags = takeFlags(newFile);
                     System.out.println("SIZE" + newFile.length());
                     fileAttributes attributes = new fileAttributes(newFile.length(),flags);
-
+                    System.out.println("modification time" + newFile.lastModified());
                     if(nextId > ids) {
                         //NEW ADDITION OF A FILE DESCRIPTOR
                         ids = nextId;
@@ -232,15 +232,14 @@ public class NfsServer {
 
                     readMsg.getFd().setPosFromStart(currentChannel.position());
 
-                    fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize());
+                    fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize(),filesInServer.get(check).file.lastModified());
 
                     System.out.println("SIZE 1 " + "Read".length());
                     System.out.println("SIZE 2 " + getObjectSize(readMsg.getReadClientInt()));
                     System.out.println("SIZE 3 " + s);
                     System.out.println("SIZE 4 " + getObjectSize(readMsg.getFd()));
                     System.out.println("SIZE 5 " + getObjectSize(attributes));
-
-
+                    System.out.println("SIZE 6 " + filesInServer.get(check).getFile().lastModified());
                     udpMessageRead serverAnswer = new udpMessageRead("Read",m,readMsg.getReadClientInt(),readMsg.getFd(),attributes);
 
                    System.out.println("read size"+ getObjectSize(serverAnswer));
@@ -270,8 +269,6 @@ public class NfsServer {
                     int size = 0;
 
 //
-//                    size = (int) writeΜsg.getSize();
-
 
                     ByteBuffer byteBuffer = ByteBuffer.wrap(writeΜsg.getWriteMsg());
 

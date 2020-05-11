@@ -41,10 +41,10 @@ class ServerInfo {
 class CacheMemory {
     List<Block> cache;
 //    int cacheBlocks;
-    double blockSize;
+    int blockSize;
     int freshT;
 
-    public CacheMemory(double blockSize, int freshT) {
+    public CacheMemory(int blockSize, int freshT) {
         this.cache = new ArrayList<>();
         this.blockSize = blockSize;
         this.freshT = freshT;
@@ -63,11 +63,11 @@ class CacheMemory {
         this.cache = cache;
     }
 
-    public double getBlockSize() {
+    public int getBlockSize() {
         return blockSize;
     }
 
-    public void setBlockSize(double blockSize) {
+    public void setBlockSize(int blockSize) {
         this.blockSize = blockSize;
     }
 
@@ -439,6 +439,12 @@ class fileAttributes implements Serializable {
     long size;
     ArrayList<Integer>flags;
     long timestampAttributes;
+    long modificationTime;
+
+    public fileAttributes(long size,long modificationTime) {
+        this.size = size;
+        this.modificationTime = modificationTime;
+    }
 
     public fileAttributes(long size, ArrayList<Integer> flags) {
         this.size = size;
@@ -449,6 +455,14 @@ class fileAttributes implements Serializable {
         this.size = size;
         this.flags = flags;
         this.timestampAttributes = timestampAttributes;
+    }
+
+    public long getModificationTime() {
+        return modificationTime;
+    }
+
+    public void setModificationTime(long modificationTime) {
+        this.modificationTime = modificationTime;
     }
 
     public long getTimestampAttributes() {
@@ -685,11 +699,50 @@ class Block implements Serializable{
     byte[] bytearray;
     int hasInfo;
     long blockTimeStamp;
+    long modificationStamp;
+    fileID fileInfo;
+    long start;
+    long end;
 
     public Block(int size) {
         this.bytearray = new byte[size];
         this.hasInfo = 0;
         this.blockTimeStamp = 0;
+        this.modificationStamp = 0;
+        this.start = 0;
+        this.end = 0;
+    }
+
+    public long getStart() {
+        return start;
+    }
+
+    public void setStart(long start) {
+        this.start = start;
+    }
+
+    public long getEnd() {
+        return end;
+    }
+
+    public void setEnd(long end) {
+        this.end = end;
+    }
+
+    public fileID getFileInfo() {
+        return fileInfo;
+    }
+
+    public void setFileInfo(fileID fileInfo) {
+        this.fileInfo = fileInfo;
+    }
+
+    public long getModificationStamp() {
+        return modificationStamp;
+    }
+
+    public void setModificationStamp(long modificationStamp) {
+        this.modificationStamp = modificationStamp;
     }
 
     public long getBlockTimeStamp() {
