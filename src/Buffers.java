@@ -703,6 +703,7 @@ class Block implements Serializable{
     fileID fileInfo;
     long start;
     long end;
+    int sizeofData;
 
     public Block(int size) {
         this.bytearray = new byte[size];
@@ -711,6 +712,20 @@ class Block implements Serializable{
         this.modificationStamp = 0;
         this.start = 0;
         this.end = 0;
+    }
+
+
+    public Block(int size, int sizeofData) {
+        this.bytearray = new byte[size];
+        this.sizeofData = sizeofData;
+    }
+
+    public int getSizeofData() {
+        return sizeofData;
+    }
+
+    public void setSizeofData(int sizeofData) {
+        this.sizeofData = sizeofData;
     }
 
     public long getStart() {

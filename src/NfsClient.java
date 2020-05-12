@@ -6,6 +6,7 @@ import java.io.*;
 import java.lang.instrument.Instrumentation;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.sql.Array;
 import java.sql.ClientInfoStatus;
 import java.util.*;
 import java.util.jar.Attributes;
@@ -119,6 +120,7 @@ public class NfsClient implements   nfsAPI{
 
             for(int i =0; i < cacheBlocks; i++){
                 Block addBlock = new Block(blockSize);
+                System.out.println("prwth"+ addBlock.getBytearray()[1]);
                 cacheMemory.getCache().add(addBlock);
             }
 
@@ -241,6 +243,8 @@ public class NfsClient implements   nfsAPI{
     @Override
     public int myNfs_read(int fd, Msg buff, int n) {
 
+        long time = currentTimeInSeconds();
+
         System.out.println("requested fd" + fd);
 //        System.out.println("PosfromStart : " + middlewarefds.get(fd).getFd().getPosFromStart());
 //        System.out.println(middlewarefds.get(fd).getFd());
@@ -265,25 +269,109 @@ public class NfsClient implements   nfsAPI{
         }
         fileAttributes attributes = file.getAttributes();
 
+        Block returnBLock = bytesInCache(filed,n,time,filed.getFd(),n);
 
-        //how many bytes
-        int readBytes = checkBytes(n);
-        System.out.println("nnnn"+ readBytes);
-        udpMessageRead header = new udpMessageRead(read,readBytes,readInt,filed,attributes);
+        System.out.println("VLOCKK"+returnBLock.getBytearray().length);
+        System.out.println("data" + new String(returnBLock.getBytearray(),StandardCharsets.UTF_8) );
 
-        int sizeHeader = getObjectSize(header);
-        System.out.println("sizeHeader" + sizeHeader);
+        if(returnBLock.getSizeofData() == n){
+            byte[] array = biggerSmaller(returnBLock.getBytearray());
+            buff.setMsg(array);
+            System.out.println("wanted file read"+ new String(array, StandardCharsets.UTF_8));
+            System.out.println("position"+filed.getPosFromStart());
+            return array.length;
+        }
+        else {
+            System.out.println("N + sizeofBLock" + n + returnBLock.getSizeofData());
+            n = n - returnBLock.getSizeofData();
+        }
+        while (n > 0){
+            int end = 0;
+            if(returnBLock.sizeofData > 0){
+                System.out.println("data" + new String(returnBLock.getBytearray(),StandardCharsets.UTF_8) );
+                end = endRead(returnBLock.getBytearray(), (int) filed.getPosFromStart());
+            }
+            else {
+                end = (int) (filed.getPosFromStart() + n);
+            }
+            System.out.println("enddd" + end);
+            int startPosition = (int) filed.getPosFromStart();
 
-        int remainPacket = MAX_UDP_PACKET_SIZE - sizeHeader;
+            int readn = (int) (end - filed.getPosFromStart());
 
-        byte[] msg = remoteRead(fd,readBytes,remainPacket,attributes);
+            int readBytes = checkBytes(readn);
 
+            udpMessageRead header = new udpMessageRead(read,readBytes,readInt,filed,attributes);
+            int sizeHeader = getObjectSize(header);
+            System.out.println("sizeHeader" + sizeHeader);
+
+            int remainPacket = MAX_UDP_PACKET_SIZE - sizeHeader;
+
+            byte[] msg = remoteRead(fd,readBytes,remainPacket,attributes);
+
+            filed = middlewarefds.get(fd);
+            System.out.println("new fd"+middlewarefds.get(fd).getPosFromStart());
+
+            n = n - msg.length;
+            System.out.println("SIZEEEEEEEEEEEEEE" + file.getAttributes().getSize());
+            System.out.println("POSSSSSSSSSSSSSSS" + filed);
+
+            System.out.println("data in read"+new String(msg,StandardCharsets.UTF_8));
+
+            int copyend =0 ;
+            if(filed.getPosFromStart() > returnBLock.getBytearray().length){
+                copyend = returnBLock.getBytearray().length;
+            }
+            else {
+                copyend = (int) filed.getPosFromStart();
+            }
+            System.out.println("startPosition "+ startPosition);
+            System.out.println("copyend"+copyend);
+            returnBLock = inserArray(msg,startPosition, copyend,returnBLock);
+            System.out.println("before in read"+new String(returnBLock.getBytearray(),StandardCharsets.UTF_8));
+
+            int newfd = checkNewFd(returnBLock,filed);
+            if(newfd!=-1){
+                filed.setPosFromStart(newfd);
+            }
+            System.out.println("new fd"+filed.getPosFromStart());
+            System.out.println("data in read"+new String(returnBLock.getBytearray(),StandardCharsets.UTF_8));
+
+
+            System.out.println("Position of file descriptor"+filed.getPosFromStart());
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            if(filed.getPosFromStart() == file.getAttributes().getSize()){
+                break;
+            }
+        }
+
+
+        byte[] msg = Arrays.copyOfRange(returnBLock.getBytearray(),0, (int) filed.getPosFromStart());
         buff.setMsg(msg);
+        System.out.println("position"+filed.getPosFromStart());
 
-        //remove from read messages when app takes them
-        System.out.println("wanted file read"+ new String(buff.getMsg(), StandardCharsets.UTF_8));
+        System.out.println("wanted file read"+ new String(returnBLock.getBytearray(), StandardCharsets.UTF_8));
+        return returnBLock.getBytearray().length;
+//        int readBytes = checkBytes(n);
 
-        return buff.getMsg().length; // success
+//        System.out.println("nnnn"+ readBytes);
+//        udpMessageRead header = new udpMessageRead(read,readBytes,readInt,filed,attributes);
+//        int sizeHeader = getObjectSize(header);
+//        System.out.println("sizeHeader" + sizeHeader);
+//
+//        int remainPacket = MAX_UDP_PACKET_SIZE - sizeHeader;
+//        byte[] msg = remoteRead(fd,readBytes,remainPacket,attributes);
+//
+//        buff.setMsg(msg);
+//
+//        //remove from read messages when app takes them
+//        System.out.println("wanted file read"+ new String(buff.getMsg(), StandardCharsets.UTF_8));
+//
+//        return buff.getMsg().length; // success
     }
 
     @Override
@@ -452,6 +540,7 @@ public class NfsClient implements   nfsAPI{
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream( );
 
+
         while(repetition  > 0){
             System.out.println("before :"+ n);
             int check = n / payload;
@@ -480,6 +569,7 @@ public class NfsClient implements   nfsAPI{
             System.out.println("POS"+ newfileId.getPosFromStart());
 
             if(file.getAttributes().getSize() == newfileId.getPosFromStart()){
+                System.out.println("ne"+newfileId);
                 break;
             }
             udpMessageRead readMsg = new udpMessageRead(read,realBytes,readInt,newfileId,attributes);
@@ -492,7 +582,9 @@ public class NfsClient implements   nfsAPI{
             block2(clientLocks.get(fd));
 
             printfCache();
+
             try {
+
                 System.out.println("size of byte array"+ readMsgs.get(readInt).getReadMsg().length);
                 outputStream.write(readMsgs.get(readInt).getReadMsg());
             } catch (IOException e) {
@@ -500,6 +592,7 @@ public class NfsClient implements   nfsAPI{
             }
             readMsgs.remove(readInt);
         }
+        System.out.println("posssss"+ middlewarefds.get(fd).getPosFromStart());
         return outputStream.toByteArray();
     }
 
@@ -678,8 +771,10 @@ public class NfsClient implements   nfsAPI{
 
                             //give attributes a timestamp
                             fileDescriptor newfd = middlewarefds.get(returnMsg.getFd().getClientID());
-                            newfd.setPosFromStart(returnMsg.getFd().getPosFromStart());
+                            System.out.println("mesa sto read"+newfd);
 
+                            newfd.setPosFromStart(returnMsg.getFd().getPosFromStart());
+                            System.out.println("MESA STHN READDDDDDD"+newfd.getPosFromStart());
                             long time = currentTimeInSeconds() + cacheMemory.freshT;
 //                            //refresh file information to client after server-Msg returned
                             fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),time);
@@ -699,8 +794,8 @@ public class NfsClient implements   nfsAPI{
                             System.out.println("Current time "+ attributes.getTimestampAttributes());
                             System.out.println("Modification time" + returnMsg.getAttributes().getModificationTime());
                             System.out.println("INSERT CACHE");
-                            if(cacheMemory.getCache().size()> 0){
-                                int insertCache = insertCache(returnMsg.getReadMsg(),newfd.getPosFromStart() - returnMsg.getReadMsg().length,newfd.getPosFromStart()-1,time,returnMsg.getAttributes().getModificationTime(),newfd.getFd());
+                            if(cacheMemory.getCache().size()> 0 && returnMsg.getReadMsg().length > 0){
+                                int insertCache = insertCache(returnMsg.getReadMsg(),newfd.getPosFromStart() - returnMsg.getReadMsg().length,newfd.getPosFromStart(),time,returnMsg.getAttributes().getModificationTime(),newfd.getFd());
 
                             }
 
@@ -773,6 +868,7 @@ public class NfsClient implements   nfsAPI{
                                         }
                                     }
                                 }
+
                                 idsMiddleware.get(NO_THIS_ID_READ).add(noId.getTypeID());
                                 //new Open Request
                                 fileAttributes attributes = new fileAttributes(0);
@@ -1012,6 +1108,7 @@ public class NfsClient implements   nfsAPI{
         System.out.println("before end"+end);
         int startData = 0;
         int newEnd = 0;
+
         for(int i =0; i < cacheMemory.getCache().size();i++){
             System.out.println("BLOCK +" +i);
             System.out.println("data lenget" + sizeOfdata);
@@ -1082,6 +1179,7 @@ public class NfsClient implements   nfsAPI{
                     cacheMemory.getCache().get(i).setEnd(end);
                     cacheMemory.getCache().get(i).setBytearray(refresh);
                     refreshTimestamps(cacheMemory.getCache().get(i), timestamp, modificationStamp);
+
                     sizeOfdata = sizeOfdata - cacheMemory.getBlockSize();
                     //gia to byte start
                     start = start + cacheMemory.getBlockSize();
@@ -1127,7 +1225,11 @@ public class NfsClient implements   nfsAPI{
             int l = -1;
 
             long min = cacheMemory.getCache().get(0).getBlockTimeStamp();
+
             while(true){
+                if(manyBlocks == 0){
+                    break;
+                }
                 for(int i =0;i < cacheMemory.getCache().size() ;i++) {
                     if (cacheMemory.getCache().get(i).getBlockTimeStamp() <= min) {
                         min = cacheMemory.getCache().get(i).getBlockTimeStamp();
@@ -1135,10 +1237,14 @@ public class NfsClient implements   nfsAPI{
                     }
                 }
                 listOfBlocks.add(l);
-                if(listOfBlocks.size() == manyBlocks){
+                System.out.println("kappa "+ listOfBlocks.size());
+                if(listOfBlocks.size() == manyBlocks || listOfBlocks.size() == 0){
                     break;
                 }
             }
+
+
+            System.out.println("list "+ listOfBlocks.size());
             for(int k = 0; k < listOfBlocks.size(); k++){
                 if(cacheMemory.blockSize > sizeOfdata){
                     newEnd = (int)startData + sizeOfdata;
@@ -1151,6 +1257,8 @@ public class NfsClient implements   nfsAPI{
                 }
                 System.out.println("NEw end"+ newEnd);
                 System.out.println("STARt" + startData + k);
+                System.out.println("end"+ end);
+                System.out.println("start"+start);
 
                 byte[] refresh = Arrays.copyOfRange(data, (int) startData, newEnd);
                 cacheMemory.getCache().get(listOfBlocks.get(k)).setBytearray(refresh);
@@ -1161,12 +1269,150 @@ public class NfsClient implements   nfsAPI{
                 refreshTimestamps(cacheMemory.getCache().get(listOfBlocks.get(k)),timestamp,modificationStamp);
                 startData = startData + cacheMemory.getBlockSize();
                 start = start + cacheMemory.getBlockSize();
+                System.out.println("data in cache"+new String(cacheMemory.getCache().get(listOfBlocks.get(k)).getBytearray(),StandardCharsets.UTF_8));
             }
         }
         return 1;
     }
 
 
+    public Block bytesInCache(fileDescriptor fd,int n,long currentTime,fileID file,int size){
+
+        int sizeOfBytes = n;
+        long positionFD1 = fd.getPosFromStart();
+
+        Block returnBlock = new Block((int) (positionFD1+size),0);
+
+        System.out.println("BLOCKKKKKK" + returnBlock.getBytearray().length);
+        int startData = 0;
+        int endData =  0;
+        int fdPos=0;
+        int end = (int) (fd.getPosFromStart() + n);
+        int stardfd = (int) fd.getPosFromStart();
+        System.out.println("end"+ end);
+//        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for(int i =0; i< cacheMemory.getCache().size();i++){
+            System.out.println("BLOCK "+ i);
+            if(file.equals(cacheMemory.getCache().get(i).getFileInfo())){
+
+                if(currentTime > cacheMemory.getCache().get(i).getBlockTimeStamp()){
+                    continue;
+                }
+                long startBlock = cacheMemory.getCache().get(i).getStart();
+                long endBlock = cacheMemory.getCache().get(i).getEnd();
+                long positionFD = fd.getPosFromStart();
+//                long end = (fd.getPosFromStart() + )
+                System.out.println("FD POSITION" +fd.getPosFromStart());
+//                System.out.println("start second if :"+ start);
+                System.out.println("END"+ endBlock);
+                System.out.println("start " +startBlock);
+                System.out.println("sizeofBytes" + sizeOfBytes);
+                System.out.println("Bytearray in block" + new String(cacheMemory.getCache().get(i).getBytearray(),StandardCharsets.UTF_8));
+
+                if(startBlock >= stardfd ||( endBlock >= stardfd && endBlock <= end)){
+                    returnBlock.setHasInfo(1);
+
+//                    startBlock = 0;
+                    int start = 0;
+                    int old = (int) positionFD;
+
+                    int func = (int) (positionFD / cacheMemory.getBlockSize());
+
+
+                    if(positionFD >=startBlock){
+//                        startData = (int) (start + (int) (positionFD - func*cacheMemory.getBlockSize()));
+                        startData = (int) (positionFD - startBlock);
+                    }
+                    else {
+                        startData=0;
+                    }
+
+                    int check = (int) (sizeOfBytes + positionFD);
+
+                    if(check > endBlock){
+                        endData = cacheMemory.getCache().get(i).getBytearray().length;
+                        sizeOfBytes = sizeOfBytes - (cacheMemory.getCache().get(i).getBytearray().length - startData);
+                    }
+                    else if(check == endBlock){
+                        endData = cacheMemory.getCache().get(i).getBytearray().length;
+                        sizeOfBytes = sizeOfBytes - (cacheMemory.getCache().get(i).getBytearray().length - startData);
+                    }
+                    else {
+                        endData = startData + sizeOfBytes;
+                        sizeOfBytes = 0;
+                    }
+
+                    System.out.println("endData" + endData);
+                    System.out.println("stardData "+ startData);
+
+
+                    System.out.println("new fd" + fd.getPosFromStart());
+                    byte[] refresh = Arrays.copyOfRange(cacheMemory.getCache().get(i).bytearray,startData,endData);
+
+                    System.out.println("startdata"+old);
+                    System.out.println("end"+old+refresh.length);
+
+                    inserArray(refresh, (int) startBlock, (int) (startBlock+refresh.length),returnBlock);
+
+                    System.out.println("inside " + new String(returnBlock.getBytearray(),StandardCharsets.UTF_8));
+                    long oldFD = fd.getPosFromStart();
+                    if(startBlock == oldFD){
+                        fd.setPosFromStart(oldFD + refresh.length);
+                    }
+                    int back = returnBlock.getSizeofData();
+                    back = back + refresh.length;
+                    returnBlock.setSizeofData(back);
+
+                    System.out.println("Bytearray :"+ new String(refresh,StandardCharsets.UTF_8));
+                    if (sizeOfBytes == 0){
+//                        returnBlock.setBytearray(out.toByteArray());
+                        return returnBlock;
+                    }
+                }
+            }
+        }
+//        returnBlock.setBytearray(out.toByteArray());
+        return returnBlock;
+    }
+
+//
+    public  byte[] biggerSmaller(byte[] array){
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        for(int i =0;i < array.length;i++){
+            if(array[i] != 0){
+                outputStream.write(array[i]);
+            }
+        }
+        return outputStream.toByteArray();
+    }
+    public Block inserArray(byte[] array,int start,int end,Block block){
+
+        System.out.println("block asdadadasdadas" +block.getBytearray().length);
+        for(int i = start,j=0;i<end;i++,j++){
+            block.getBytearray()[i] = array[j];
+        }
+        return block;
+    }
+
+    public int endRead(byte[] array,int start){
+
+        for(int i =start;i <array.length;i++){
+            if(array[i]!= 0){
+                return i;
+            }
+        }
+
+        return array.length;
+    }
+
+    public int checkNewFd(Block block,fileDescriptor oldfd){
+        for(int i = (int) oldfd.getPosFromStart(); i < block.getBytearray().length; i++){
+            if(block.getBytearray()[i] == 0){
+                return i;
+            }
+        }
+        return -1;
+    }
     public void printfCache(){
         for(int i = 0;i < cacheMemory.getCache().size();i++){
             System.out.println("BLOCK "+i);
