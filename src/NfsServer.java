@@ -24,16 +24,18 @@ public class NfsServer {
     public static final int O_WRONLY = 6; // WRITE only permission
     public static final int E_EXIST = -1; //error if file exists with O_EXCl
     public  static final int ERROR = -2;
-    public  static int MAX_NUM_OF_FD = 10;
+    public  static int MAX_NUM_OF_FD = 5;
     public static final String NO_THIS_ID_READ = "DONT_KNOW_THIS_ID_READ";
     public static final String NO_THIS_ID_WRITE = "DONT_KNOW_THIS_ID_WRITE";
+    public static int numOfFds = 0;
+
+
+
 
     public static void main(String[] args) {
-
-        HashMap<Integer,File> idsFIles = new HashMap<>();
-        HashMap<Integer, serversFdsInfo> filesServer = new HashMap<>();
-        Integer num = 1;
-
+//        HashMap<Integer,File> idsFIles = new HashMap<>();
+//        HashMap<Integer, serversFdsInfo> filesServer = new HashMap<>();
+//        Integer num = 1;
 
         //new Structures
         HashMap<fileID,serversFdsInfo> filesInServer = new HashMap<>();
@@ -89,9 +91,9 @@ public class NfsServer {
 
         DatagramPacket packet = null;
         int ids = 0;
-        int numOfFds = 0;
         while (true) {
             try {
+                printFds(filesInServer);
                 byte[] buffer = new byte[1024];
                 System.out.println(serverSocket.getLocalAddress());
                 packet = new DatagramPacket(buffer, buffer.length, serverSocket.getInetAddress(), serverSocket.getLocalPort());
@@ -113,6 +115,8 @@ public class NfsServer {
                 String type = checkMessageType(receiveMessage);
 
                 if (type.equals("Open")) {
+                    long time = currentTimeInSeconds();
+
                     System.out.println("New open request to Server id " + ids);
                     udpMessageOpen openMsg = (udpMessageOpen) receiveMessage;
                     System.out.println("Request file name: " + openMsg.getFileName());
@@ -128,11 +132,22 @@ public class NfsServer {
                         }
                     }
 
+                    System.out.println("EXISTTTTTT"+exist);
+                    System.out.println("num of descriptors"+numOfFds);
+
                     if(exist == -1){
-                        int check = canServer(openMsg,ids,packet.getAddress(),packet.getPort());
-                        if(check < 0){
-                            continue;
-                        }
+                        //check delete fileDescriptor
+                        System.out.println("num of descriptors"+numOfFds);
+                        replaceFileDescriptor(filesInServer);
+//                        try {
+//                            Thread.sleep(3000);
+//                        } catch (InterruptedException e) {
+//                            e.printStackTrace();
+//                        }
+//                        int check = canServer(openMsg,ids,packet.getAddress(),packet.getPort());
+//                        if(check < 0){
+//                            continue;
+//                        }
                     }
 
                     Path newPath  = Paths.get(directory +"/"+ openMsg.getFileName());
@@ -140,6 +155,7 @@ public class NfsServer {
 
                     int nextId = -1;
 
+                    System.out.println("flags"+openMsg.getFlags());
                     nextId =  fillAccessMode(openMsg,filesInServer,newFile,ids);
 
                     System.out.println("nextID" + nextId);
@@ -152,11 +168,13 @@ public class NfsServer {
                     System.out.println("SIZE" + newFile.length());
                     fileAttributes attributes = new fileAttributes(newFile.length(),flags);
                     System.out.println("modification time" + newFile.lastModified());
+
                     if(nextId > ids) {
                         //NEW ADDITION OF A FILE DESCRIPTOR
                         ids = nextId;
+                        numOfFds++;
                         FileChannel fd = generateChannel(newFile);
-                        serversFdsInfo  newInfo = new serversFdsInfo(newFile,fd);
+                        serversFdsInfo  newInfo = new serversFdsInfo(newFile,fd,time);
                         filesInServer.put(newfd,newInfo);
 
 //                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
@@ -168,25 +186,24 @@ public class NfsServer {
                         FileChannel fdnew = FileChannel.open(Paths.get(newFile.getPath()),ops);
                         filesInServer.get(newfd).setFd(fdnew);
 //                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
-
+                    }
+                    else if (nextId >0){
+                        //refresh TIme
+                        filesInServer.get(newfd).setTime(time);
                     }
 
 
                     udpMessageOpen serverAnswer = new udpMessageOpen("Open",openMsg.getFlags(),openMsg.getOpenACK(),openMsg.getFiled().getClientID(),attributes,openMsg.getFiled());
-//                    try {
-//                        Thread.sleep(30000);
-//                    } catch (InterruptedException e) {
-//                        e.printStackTrace();
-//                    }
+
                     sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
                 }
                 else if(type.equals("Read")){
                     System.out.println("New read request to Server");
                     udpMessageRead readMsg = (udpMessageRead) receiveMessage;
 
-
                     fileID check = null;
                     check = existFileId(filesInServer,readMsg.getFd().getFd());
+
 
 
                     if(check == null){
@@ -197,6 +214,16 @@ public class NfsServer {
                         continue;
                     }
 
+                    if(readMsg.getAttributes().getModificationTime() == filesInServer.get(check).getFile().lastModified()){
+                        //just answer with zero bytes
+                        ByteBuffer byteBuffer = ByteBuffer.allocate(0);
+                        byte[] m = byteBuffer.array();
+                        udpMessageRead serverAnswer = new udpMessageRead("No-change",m,readMsg.getReadClientInt(),readMsg.getFd(),readMsg.getAttributes());
+                        sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
+                        continue;
+                    }
+
+                    filesInServer.get(check).setTime(currentTimeInSeconds());
                     FileChannel currentChannel = filesInServer.get(check).getFd();
 
                     currentChannel.position(readMsg.getFd().getPosFromStart());
@@ -232,7 +259,7 @@ public class NfsServer {
 
                     readMsg.getFd().setPosFromStart(currentChannel.position());
 
-                    fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize(),filesInServer.get(check).file.lastModified());
+                    fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize(),readMsg.getAttributes().getFlags(),filesInServer.get(check).file.lastModified());
 
                     System.out.println("SIZE 1 " + "Read".length());
                     System.out.println("SIZE 2 " + getObjectSize(readMsg.getReadClientInt()));
@@ -251,6 +278,7 @@ public class NfsServer {
 //
                     udpMessageWrite writeΜsg = (udpMessageWrite) receiveMessage;
                     fileID check = null;
+                    System.out.println("writeMsgPos"+writeΜsg.getFd().getPosFromStart());
 
                     check = existFileId(filesInServer,writeΜsg.getFd().getFd());
 
@@ -261,6 +289,9 @@ public class NfsServer {
                         sendUdpMessage(answer,packet.getAddress(),packet.getPort());
                         continue;
                     }
+
+
+                    filesInServer.get(check).setTime(currentTimeInSeconds());
 
                     FileChannel writeChannel = filesInServer.get(check).getFd();
 
@@ -278,9 +309,11 @@ public class NfsServer {
                         System.out.println("PROblem" + write);
                     }
 
+                    writeΜsg.getAttributes().setModificationTime(filesInServer.get(check).getFile().lastModified());
                     writeΜsg.getAttributes().setSize(writeChannel.size());
                     writeΜsg.getFd().setPosFromStart(writeChannel.position());
 
+                    System.out.println("writeMsgPos"+writeΜsg.getFd().getPosFromStart());
                     udpMessageWrite retMsg = new udpMessageWrite("Write",writeΜsg.getWriteClientInt(),writeΜsg.getFd(),writeΜsg.getAttributes());
                     sendUdpMessage(retMsg,packet.getAddress(),packet.getPort());
                 }
@@ -570,6 +603,44 @@ public class NfsServer {
         return null;
     }
 
+    public static void replaceFileDescriptor(HashMap<fileID,serversFdsInfo> filesInServer){
+        if(numOfFds + 1 > MAX_NUM_OF_FD){
+            Set<fileID> keys = filesInServer.keySet();
+            long min = 0;
+            fileID delete = null;
+            for(fileID temp : keys){
+                serversFdsInfo curr = filesInServer.get(temp);
+                min = curr.getTime();
+                delete = temp;
+                break;
+            }
+
+            for(fileID temp : keys){
+                serversFdsInfo curr = filesInServer.get(temp);
+
+                if(curr.getTime() <= min){
+                    min = curr.getTime();
+                    delete = temp;
+                }
+            }
+
+            filesInServer.remove(delete);
+            numOfFds--;
+
+        }
+    }
+
+    public static void printFds(HashMap<fileID,serversFdsInfo> filesInServer){
+        Set<fileID> keys = filesInServer.keySet();
+
+        for(fileID temp : keys){
+            serversFdsInfo curr = filesInServer.get(temp);
+            System.out.println("Filename: "+ curr.getFile().getName());
+            System.out.println("Time: "+ curr.getTime());
+            System.out.println("File Descriptor: "+ curr.getFd());
+            System.out.println("KEY id: "+ temp.getFd() +" Session : "+temp.getSession());
+        }
+    }
     public static int canServer(udpMessageOpen openMsg,int ids,InetAddress ip ,int port){
 
         if(ids + 1 > MAX_NUM_OF_FD){
@@ -623,5 +694,10 @@ public class NfsServer {
 
 
         return byteMsg.length;
+    }
+    public static  long currentTimeInSeconds(){
+        long time = System.currentTimeMillis()/1000;
+        System.out.println(System.currentTimeMillis()/1000);
+        return time;
     }
 }

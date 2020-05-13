@@ -1,4 +1,5 @@
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class Application {
@@ -19,7 +20,7 @@ public class Application {
 //        NfsClient client = new NfsClient();
 //        EnumSet<Flag> flag = null;
 
-        client.myNfs_init("192.168.2.2",4001,10,1000,100);
+        client.myNfs_init("192.168.2.2",4001,40,400,100);
 
 //        Scanner in = new Scanner(System.in);
 //        HashMap<Integer,String> appfds = new HashMap<>();
@@ -32,7 +33,7 @@ public class Application {
             System.out.println(RED_BOLD + "    3) Write:");
             System.out.println(RED_BOLD + "    4) seek:");
             System.out.println(RED_BOLD + "    5) close:");
-
+            System.out.println(RED_BOLD + "    6) Print Cache");
 
             int choice = in.nextInt();
             String fname;
@@ -69,6 +70,7 @@ public class Application {
                 case 2:
 
                     Msg check = read();
+                    System.out.println("STO APPLICATION :"+new String(check.getMsg(), StandardCharsets.UTF_8));
                     if(check == null){
                         System.err.println(RED + "Read returned an error");
                         break;
@@ -144,7 +146,9 @@ public class Application {
                         System.err.println("Error with close");
                     }
                     break;
-
+                case 6:
+//                    if()
+                    client.printfCache();
 
             }
 

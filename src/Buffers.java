@@ -499,10 +499,20 @@ class fileAttributes implements Serializable {
 class serversFdsInfo {
     File file;
     FileChannel fd;
+    long time;
 
-    public serversFdsInfo(File file, FileChannel fd) {
+    public serversFdsInfo(File file, FileChannel fd,long time) {
         this.file = file;
         this.fd = fd;
+        this.time = time;
+    }
+
+    public long getTime() {
+        return time;
+    }
+
+    public void setTime(long time) {
+        this.time = time;
     }
 
     public void setFile(File file) {
