@@ -225,3 +225,26 @@ Blocks {
 
     size = sizeOf block ?
 }
+
+
+Insert cache
+
+[] if an empty block exist put it there these bytes until no empty blocks exists.
+[] if non-empty blocks exists .Then we do teh following
+    [] if these bytes are already exist ..we replace them and we refresh the timestamps
+    [] if these bytes does not exist ..we delete the oldest blocks and put them there
+
+
+READ CACHE
+[] We return at a block the bytes that we take from the cache
+[] if these bytes are valid and if the modification timestamp is valid
+    []if not we send a remote or more read requests to server
+    [] and we insert the bytes that we read at cache
+[] else we take the bytes that we can from the cache and the rest from the server
+
+
+WRITE CACHE
+[] if the application wants to write something at a specific file descriptor then we send it directly to server and if WE WRITE ALL TEH BYTES THAT we want then the client
+insert it to the cache
+    [] if already exists , we replace it
+    [] if does not exist then we put it at an empty block or put it.

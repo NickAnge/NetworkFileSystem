@@ -28,6 +28,7 @@ public class NfsServer {
     public static final String NO_THIS_ID_READ = "DONT_KNOW_THIS_ID_READ";
     public static final String NO_THIS_ID_WRITE = "DONT_KNOW_THIS_ID_WRITE";
     public static int numOfFds = 0;
+    public  static final int MAX_UDP_PACKET_SIZE = 1500;
 
 
 
@@ -81,7 +82,7 @@ public class NfsServer {
 //        serverSocket = null;
 
         try {
-            serverSocket = new DatagramSocket(4001);
+            serverSocket = new DatagramSocket(4002);
             System.out.println("Ip: "+ serverSocket.getLocalAddress() +" Port: "+serverSocket.getLocalPort());
         } catch (SocketException e) {
             e.printStackTrace();
@@ -94,7 +95,7 @@ public class NfsServer {
         while (true) {
             try {
                 printFds(filesInServer);
-                byte[] buffer = new byte[1024];
+                byte[] buffer = new byte[MAX_UDP_PACKET_SIZE];
                 System.out.println(serverSocket.getLocalAddress());
                 packet = new DatagramPacket(buffer, buffer.length, serverSocket.getInetAddress(), serverSocket.getLocalPort());
                 System.out.println("Paw ston server gia receive");

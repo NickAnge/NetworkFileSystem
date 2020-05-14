@@ -15,12 +15,15 @@ public class Application {
     public static HashMap<Integer,String> appfds = new HashMap<>();
     public  static Scanner in = new Scanner(System.in);
     public static NfsClient client = new NfsClient();
-
+    public static final int BLOCKSIZE = 500;//839 max
+    public static final int NUM_BLOCKS = 3;
+    public static final int freshT = 100;
     public static void main(String[] args) {
 //        NfsClient client = new NfsClient();
 //        EnumSet<Flag> flag = null;
 
-        client.myNfs_init("192.168.2.2",4001,40,400,100);
+
+        client.myNfs_init("192.168.2.2",4002,NUM_BLOCKS,BLOCKSIZE,freshT);
 
 //        Scanner in = new Scanner(System.in);
 //        HashMap<Integer,String> appfds = new HashMap<>();
@@ -68,7 +71,6 @@ public class Application {
 
                     break;
                 case 2:
-
                     Msg check = read();
                     System.out.println("STO APPLICATION :"+new String(check.getMsg(), StandardCharsets.UTF_8));
                     if(check == null){
@@ -149,7 +151,41 @@ public class Application {
                 case 6:
 //                    if()
                     client.printfCache();
+                case 7:
+                    System.out.print("Bytes read per request :");
+                    int bytes = in.nextInt();
+                    int i=0;
+                    int fd71 = in.nextInt();
+                    int fd72 = in.nextInt();
 
+                    int write7 = 0;
+                    int read7 =0;
+                    while( i <= 4095) {
+                        i = i + bytes;
+                        byte [] bytesMsg = new byte[bytes];
+
+                        Msg msg = new Msg(bytesMsg);
+
+                        read7 = client.myNfs_read(fd71,msg, bytes);
+                        System.out.println("Bytes"+ msg.getMsg().length);
+
+                        write = client.myNfs_write(fd72,msg,msg.getMsg().length);
+
+                        System.out.println("Bytes Write" + msg.getMsg().length);
+                    }
+//                        Msg check1 = read();
+//                        System.out.println("STO APPLICATION :"+new String(check1.getMsg(), StandardCharsets.UTF_8));
+//                        if(check1 == null){
+//                            System.err.println(RED + "Read returned an error");
+//                            break;
+//                        }
+//                        int writeInt = write(check1);
+//
+//                        if(writeInt < 0 ){
+//                            System.err.println(RED + "Write returned an error");
+//                        }
+//                    }
+                    break;
             }
 
         }
@@ -195,7 +231,7 @@ public class Application {
     }
 
     public static Msg read(){
-        int fd = -1;
+        int fd = 0;
 
         while(true){
             System.out.println(RED_BOLD + "Choose File descriptor");
@@ -211,6 +247,7 @@ public class Application {
         System.out.print(RED_BOLD + "How many bytes: ");
         int read = 0;
 
+//        int bytes = 10;
         int bytes  = in.nextInt();
 
         byte [] bytesMsg = new byte[bytes];
