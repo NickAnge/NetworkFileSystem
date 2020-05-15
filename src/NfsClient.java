@@ -19,7 +19,9 @@ public class NfsClient implements   nfsAPI{
     public static final String NO_THIS_ID_READ = "DONT_KNOW_THIS_ID_READ";
     public static final String NO_THIS_ID_WRITE = "DONT_KNOW_THIS_ID_WRITE";
     public  static final int MAX_UDP_PACKET_SIZE = 1500;
+    public static final String RED_BOLD = "\033[1;31m";    // RED
 
+    public static final String GREEN_BOLD = "\033[1;32m";  // GREEN
     private static final int ERROR = -2;
     public int readInt,writeInt,openInt,openAck;
     private  ServerInfo server;
@@ -51,6 +53,10 @@ public class NfsClient implements   nfsAPI{
     public final Object writeLock;
 
 
+
+    //metrhseis
+    int data_size;
+    int requestsSend;
     //waitinf integers;
     int readWaiting;
     int openWaiting;
@@ -65,6 +71,7 @@ public class NfsClient implements   nfsAPI{
     HashMap<Integer,ArrayList<udpMessageRead>> noIdreadMessages;
     HashMap<Integer,ArrayList<udpMessageWrite>> noIdwriteMessages;
 
+    int times =0;
 
     public NfsClient() {
         this.readInt = this.openInt = this.writeInt = this.openAck = -1; //  integers for duplicates
@@ -108,6 +115,13 @@ public class NfsClient implements   nfsAPI{
 
         //first time
         filesInMiddleware = new HashMap<>();
+
+        //ogkos dedomenwn
+        data_size = 0;
+
+        //request
+        requestsSend = 0;
+        times =0;
     }
 
     @Override
@@ -156,6 +170,7 @@ public class NfsClient implements   nfsAPI{
                         return  ERROR;
                     }
                     else{
+                        System.out.println("mphka edw");
                         sendServer=-1;
                         break;
                     }
@@ -193,6 +208,7 @@ public class NfsClient implements   nfsAPI{
                 return openInt;
             }
         }
+
         if(sendServer < 0){
             //send request
             fileAttributes attributes = new fileAttributes(0);
@@ -278,20 +294,9 @@ public class NfsClient implements   nfsAPI{
         System.out.println("data" + new String(returnBLock.getBytearray(),StandardCharsets.UTF_8) );
         System.out.println("data length" +returnBLock.getBytearray().length);
         if(returnBLock.getSizeofData() == n){
-            byte[] array = biggerSmaller(returnBLock.getBytearray());
+//            byte[] array = biggerSmaller(returnBLock.getBytearray());
+            byte[] array = invertArray(returnBLock.getBytearray(), (int) old,returnBLock.getBytearray().length);
             System.out.println("data length" +array.length);
-
-//            byte[] msg = new byte[n];
-//            int copyend = 0;
-//            if(filed.getPosFromStart() > returnBLock.getBytearray().length){
-//                System.out.println("COpyEnd1" + copyend);
-//                copyend = returnBLock.getBytearray().length;
-//            }
-//            else {
-//                System.out.println("COpyEnd2" + copyend);
-//                copyend = (int) filed.getPosFromStart();
-//            }
-
 //            returnBLock = inserArray(returnBLock.getBytearray(), (int) old, (int) (old+copyend),returnBLock);
             buff.setMsg(array);
             System.out.println("wanted file read"+ new String(array, StandardCharsets.UTF_8));
@@ -559,23 +564,51 @@ public class NfsClient implements   nfsAPI{
 
         DatagramPacket packet = new DatagramPacket(byteMsg, byteMsg.length,server.getServerIp(), server.port);
         System.out.println("packet - length"+ packet.getLength());
+
         if(msg.getType().equals(read)){
             while(!idsMiddleware.get(msg.getType()).contains(clientId) && !idsMiddleware.get(max_capacity).contains(clientId) && !idsMiddleware.get(NO_THIS_ID_READ).contains(clientId)){
                 //resend packet until server answer
                 send++;
                 udpSocket.send(packet);
+                data_size = data_size + packet.getLength();
+
+                System.out.println("requests" + requestsSend);
+                requestsSend++;
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
             }
         }
         else {
             while(!idsMiddleware.get(msg.getType()).contains(clientId) && !idsMiddleware.get(max_capacity).contains(clientId) && !idsMiddleware.get(NO_THIS_ID_WRITE).contains(clientId)){
                 send++;
                 udpSocket.send(packet);
+                requestsSend++;
+                data_size = data_size + packet.getLength();
+
+                System.out.println("requests" + requestsSend);
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
             }
         }
         if(send == 0){
             while(!idsMiddleware.get(msg.getType()).contains(clientId)){
                 send++;
                 udpSocket.send(packet);
+                data_size = data_size + packet.getLength();
+                requestsSend++;
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
         }
         } catch (IOException e) {
@@ -597,6 +630,9 @@ public class NfsClient implements   nfsAPI{
         while(repetition  > 0){
             System.out.println("before :"+ n);
             int check = n / payload;
+
+            this.times = this.times + check + 1;
+
             System.out.println("times" +check);
 
             if(check > 0){
@@ -654,15 +690,14 @@ public class NfsClient implements   nfsAPI{
         int end = 0;
         int writeSize = 0;
         int cache = 0;
+
         while(repetition  > 0){
             System.out.println("before n"+ n);
-
             int check = n / payload;
             System.out.println("times" +check);
 
-
             if(check > 0){
-                n = n -payload+ 22;
+                n = n -payload+22;
                 end = end + payload -22;
                 System.out.println("end "+ end);
                 cache = start;
@@ -698,11 +733,11 @@ public class NfsClient implements   nfsAPI{
             ///for cache
             udpMessageWrite msg = writeMsgs.get(fd);
             long time = currentTimeInSeconds();
-
-            if(msg.getFd().getPosFromStart() != old){
-                insertCache(sendMsg,cache,end,time,msg.getAttributes().getModificationTime(),msg.getFd().getFd());
+            if(cacheMemory.getCache().size() != 0){
+                if(msg.getFd().getPosFromStart() != old){
+                    insertCache(sendMsg,cache,end,time,msg.getAttributes().getModificationTime(),msg.getFd().getFd());
+                }
             }
-
             returnBytes = returnBytes + sendMsg.length;
         }
 
@@ -721,6 +756,8 @@ public class NfsClient implements   nfsAPI{
 //            udpSocket.setSoTimeout(1);
             udpSocket.receive(packet);
 //            System.out.println(packet.getLength());
+            data_size = data_size + packet.getLength();
+
             ByteArrayInputStream baos = new ByteArrayInputStream(buffer);
             ObjectInputStream oos = new ObjectInputStream(baos);
             udpMessage receiveMessage = (udpMessage) oos.readObject();
@@ -842,6 +879,9 @@ public class NfsClient implements   nfsAPI{
                             long time = currentTimeInSeconds() + cacheMemory.freshT;
 //                            //refresh file information to client after server-Msg returned
                             fileAttributes attributes = new fileAttributes(returnMsg.getAttributes().getSize(),returnMsg.getAttributes().getFlags(),time);
+
+                            attributes.setModificationTime(returnMsg.getAttributes().getModificationTime());
+                            System.out.println("arritibyts"+attributes.getModificationTime());
                             fileInformation file = findFile(returnMsg.getFd().getFd());
 //                            middlewarefds.put(newfd.getClientID(),newfd);
 
@@ -861,7 +901,10 @@ public class NfsClient implements   nfsAPI{
 
 
                             if(type.equals("No-change")){
-                                byte[] msg = refreshTimeBlocks(returnMsg.getFd(),returnMsg.getFd().getPosFromStart(),(long)returnMsg.getSize(),time,returnMsg.getFd().getFd());
+                                System.out.println("Start "+ newfd.getPosFromStart() );
+                                System.out.println("END" + returnMsg.getSize());
+
+                                byte[] msg = refreshTimeBlocks(returnMsg.getFd(),returnMsg.getFd().getPosFromStart(),returnMsg.getFd().getPosFromStart() + (long)returnMsg.getSize(),time,returnMsg.getFd().getFd());
                                 returnMsg.setReadMsg(msg);
 
                                 readMsgs.put(returnMsg.getReadClientInt(),returnMsg);
@@ -871,6 +914,8 @@ public class NfsClient implements   nfsAPI{
                                 unblock(clientLocks.get(newfd.getClientID()));
                                 continue;
                             }
+
+
 
                             if(cacheMemory.getCache().size()> 0 && returnMsg.getReadMsg().length > 0){
                                 int insertCache = insertCache(returnMsg.getReadMsg(),newfd.getPosFromStart() - returnMsg.getReadMsg().length,newfd.getPosFromStart(),time,returnMsg.getAttributes().getModificationTime(),newfd.getFd());
@@ -1179,17 +1224,21 @@ public class NfsClient implements   nfsAPI{
     public byte[] refreshTimeBlocks(fileDescriptor posFd ,long start,long end,long newTimestamp,fileID file){
         int sizeOfData  = (int) (end - start);
         Block returnBlock = new Block((int) (end - start));
+
         int startData = 0;
         int endData = 0;
         int startByteArray = 0;
         int endByteArray= 0;
+
         for(int i=0;i < cacheMemory.getCache().size();i++){
-            if(cacheMemory.getCache().get(i).getFileInfo().equals(file)){
+            if(cacheMemory.getCache().get(i).getHasInfo() == 1 && cacheMemory.getCache().get(i).getFileInfo().equals(file)){
                 long startBlock = cacheMemory.getCache().get(i).getStart();
                 long endBlock = cacheMemory.getCache().get(i).getEnd();
+
                 if(start >= startBlock && start <= endBlock){
                     returnBlock.setHasInfo(1);
                     cacheMemory.getCache().get(i).setBlockTimeStamp(newTimestamp);
+
                     int addition = (int) (endBlock- start);
                     start = start + addition + 1;
 
@@ -1306,6 +1355,7 @@ public class NfsClient implements   nfsAPI{
                     cacheMemory.getCache().get(i).setStart(start);
                     cacheMemory.getCache().get(i).setEnd(end);
                     cacheMemory.getCache().get(i).setBytearray(refresh);
+
                     refreshTimestamps(cacheMemory.getCache().get(i), timestamp, modificationStamp);
 
                     sizeOfdata = sizeOfdata - cacheMemory.getBlockSize();
@@ -1327,30 +1377,6 @@ public class NfsClient implements   nfsAPI{
                 }
             }
         }
-
-
-//        if(sizeOfdata > 0){
-//            int startDeleteData = 0;
-//            int endDeleteData = 0;
-//            for(int i =0; i < cacheMemory.getCache().size();i++){
-//                if(cacheMemory.getCache().get(i).getHasInfo() == 0){
-//                    continue;
-//                }
-//                else if(cacheMemory.getCache().get(i).getBlockTimeStamp() < timestamp){ // this shell is not valid
-//                    byte[] newArray = new byte[cacheMemory.getBlockSize()];
-//                    cacheMemory.getCache().get(i).setBytearray(newArray); //delete it
-//                    if(cacheMemory.blockSize > sizeOfdata){
-//                        newEnd = (int) startData + sizeOfdata;
-//                        end = start + sizeOfdata - 1;
-//                    }
-//                    else{
-//                        newEnd = (int) (cacheMemory.getBlockSize() + startData);
-//                        end = start+cacheMemory.getBlockSize() - 1;
-//                    }
-//
-//                }
-//            }
-//        }
         if(sizeOfdata > 0 && inserted < 0){
             int manyBlocks = (int) (sizeOfdata)/cacheMemory.getBlockSize();
             if (manyBlocks > cacheMemory.getCache().size()){
@@ -1362,7 +1388,6 @@ public class NfsClient implements   nfsAPI{
             int l = -1;
 
             long min = cacheMemory.getCache().get(0).getBlockTimeStamp();
-
             while(true){
                 if(manyBlocks == 0){
                     break;
@@ -1459,11 +1484,11 @@ public class NfsClient implements   nfsAPI{
                     int returnStart = 0;
                     if(positionFD >=startBlock){
                         startData = (int) (positionFD - startBlock);
-                        returnStart = (int) positionFD-1;
+                        returnStart = (int) positionFD;
                     }
                     else {
                         startData=0;
-                        returnStart = (int) startBlock-1;
+                        returnStart = (int) startBlock;
                     }
                     int check = (int) (sizeOfBytes + positionFD);
 
@@ -1472,7 +1497,7 @@ public class NfsClient implements   nfsAPI{
                         sizeOfBytes = sizeOfBytes - (cacheMemory.getCache().get(i).getBytearray().length - startData);
                     }
                     else if(check == endBlock){
-                        endData = cacheMemory.getCache().get(i).getBytearray().length;
+                        endData = cacheMemory.getCache().get(i).getBytearray().length -1;
                         sizeOfBytes = sizeOfBytes - (cacheMemory.getCache().get(i).getBytearray().length - startData);
                     }
                     else {
@@ -1493,9 +1518,10 @@ public class NfsClient implements   nfsAPI{
                     System.out.println("returnStart"+ returnStart);
                     System.out.println("returnEnd"+(returnStart+refresh.length));
 
+//                    for(in)
                     inserArray(refresh, returnStart,(returnStart+refresh.length),returnBlock);
 
-                    System.out.println("inside " + new String(returnBlock.getBytearray(),StandardCharsets.UTF_8));
+                    System.out.println("inside " + new String(returnBlock.getBytearray(),StandardCharsets.UTF_8) + returnBlock.getBytearray().length);
                     long oldFD = fd.getPosFromStart();
                     if(startBlock <= oldFD){
                         fd.setPosFromStart(oldFD + refresh.length);
@@ -1515,29 +1541,39 @@ public class NfsClient implements   nfsAPI{
     }
 
 //
-    public  byte[] biggerSmaller(byte[] array){
+    public  byte[] biggerSmaller(byte[] array){//edw lathosss to anapodo apo to insert array
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-//        byte[] return1 = new byte[array.length];
 
         for(int i =0;i < array.length;i++){
-//            System.out.println(i);
             if(array[i] != 0){
-                if(i == 19) {
-                    System.out.println(array[19]);
-                }
-                System.out.println(i);
-
+                System.out.println(array[i]);
+//                System.out.println(i);
+//                return1[i] = array[i];
+//                System.out.println(return1.length);
                 outputStream.write(array[i]);
 //                return1[i]=array[i];
             }
         }
 
+        byte[] return1 =outputStream.toByteArray() ;
+        for(int i =0;i<return1.length;i++){
+            System.out.println(return1[i]);
+        }
         return outputStream.toByteArray() ;
+    }
+    public byte[] invertArray(byte[] array,int start,int end){
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        for(int i = start; i < end; i++){
+            outputStream.write(array[i]);
+        }
+        return outputStream.toByteArray();
     }
     public Block inserArray(byte[] array,int start,int end,Block block){
 
         System.out.println("block asdadadasdadas" +block.getBytearray().length);
         for(int i = start,j=0;i<end;i++,j++){
+//            System.out.println("i "+ i + " :" + array[j]);
             block.getBytearray()[i] = array[j];
         }
         return block;
@@ -1563,13 +1599,16 @@ public class NfsClient implements   nfsAPI{
         return -1;
     }
     public void printfCache(){
+
         for(int i = 0;i < cacheMemory.getCache().size();i++){
-            System.out.println("BLOCK "+i);
-            System.out.println("bytearray " + new String(cacheMemory.getCache().get(i).getBytearray(),StandardCharsets.UTF_8));
-            System.out.println("Start :" +cacheMemory.getCache().get(i).getStart());
-            System.out.println("END :" +cacheMemory.getCache().get(i).getEnd());
-            System.out.println("Time :" +cacheMemory.getCache().get(i).getBlockTimeStamp());
-            System.out.println("MOdifTime :" +cacheMemory.getCache().get(i).getModificationStamp());
+            System.out.println(RED_BOLD +"====================");
+            System.out.println(RED_BOLD+ " || BLOCK "+i + " ||");
+            System.out.println(RED_BOLD +"====================");
+            System.out.println(GREEN_BOLD+"ByteArray " + RED_BOLD + new String(cacheMemory.getCache().get(i).getBytearray(),StandardCharsets.UTF_8));
+            System.out.println(GREEN_BOLD+"START :" +cacheMemory.getCache().get(i).getStart());
+            System.out.println(GREEN_BOLD+"END :" +cacheMemory.getCache().get(i).getEnd());
+            System.out.println(GREEN_BOLD+"TIME :" +cacheMemory.getCache().get(i).getBlockTimeStamp());
+            System.out.println(GREEN_BOLD+"MODIFICATION TIME :" +cacheMemory.getCache().get(i).getModificationStamp());
         }
     }
     public void refreshTimestamps(Block block,long timestamp,long modificationtimestamp){

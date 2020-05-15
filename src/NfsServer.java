@@ -30,6 +30,7 @@ public class NfsServer {
     public static int numOfFds = 0;
     public  static final int MAX_UDP_PACKET_SIZE = 1500;
 
+    public static int numReplys = 0;
 
 
 
@@ -99,7 +100,7 @@ public class NfsServer {
                 System.out.println(serverSocket.getLocalAddress());
                 packet = new DatagramPacket(buffer, buffer.length, serverSocket.getInetAddress(), serverSocket.getLocalPort());
                 System.out.println("Paw ston server gia receive");
-
+                System.out.println("Num of replys send by server :"+ numReplys);
                 serverSocket.receive(packet);
 
                 System.out.println(packet.getLength());
@@ -140,15 +141,6 @@ public class NfsServer {
                         //check delete fileDescriptor
                         System.out.println("num of descriptors"+numOfFds);
                         replaceFileDescriptor(filesInServer);
-//                        try {
-//                            Thread.sleep(3000);
-//                        } catch (InterruptedException e) {
-//                            e.printStackTrace();
-//                        }
-//                        int check = canServer(openMsg,ids,packet.getAddress(),packet.getPort());
-//                        if(check < 0){
-//                            continue;
-//                        }
                     }
 
                     Path newPath  = Paths.get(directory +"/"+ openMsg.getFileName());
@@ -182,10 +174,10 @@ public class NfsServer {
 
                     }
                     else if(openMsg.getFlags().contains(O_TRUNC) && nextId >=0){
-                        Set<StandardOpenOption> ops = new TreeSet<>();
-                        ops.add(StandardOpenOption.TRUNCATE_EXISTING);
-                        FileChannel fdnew = FileChannel.open(Paths.get(newFile.getPath()),ops);
-                        filesInServer.get(newfd).setFd(fdnew);
+//                        Set<StandardOpenOption> ops = new TreeSet<>();
+//                        ops.add(StandardOpenOption.TRU NCATE_EXISTING);
+//                        FileChannel fdnew = FileChannel.open(Paths.get(newFile.getPath()),ops);
+//                        filesInServer.get(newfd).setFd(fdnew);
 //                        openMsg.getAttributes().setSize(filesInServer.get(newfd).getFile().length());
                     }
                     else if (nextId >0){
@@ -197,6 +189,7 @@ public class NfsServer {
                     udpMessageOpen serverAnswer = new udpMessageOpen("Open",openMsg.getFlags(),openMsg.getOpenACK(),openMsg.getFiled().getClientID(),attributes,openMsg.getFiled());
 
                     sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
+                    numReplys++;
                 }
                 else if(type.equals("Read")){
                     System.out.println("New read request to Server");
@@ -215,14 +208,16 @@ public class NfsServer {
                         continue;
                     }
 
-                    if(readMsg.getAttributes().getModificationTime() == filesInServer.get(check).getFile().lastModified()){
-                        //just answer with zero bytes
-                        ByteBuffer byteBuffer = ByteBuffer.allocate(0);
-                        byte[] m = byteBuffer.array();
-                        udpMessageRead serverAnswer = new udpMessageRead("No-change",m,readMsg.getReadClientInt(),readMsg.getFd(),readMsg.getAttributes());
-                        sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
-                        continue;
-                    }
+//                    if(readMsg.getAttributes().getModificationTime() == filesInServer.get(check).getFile().lastModified()){
+//                        //just answer with zero bytes
+//                        ByteBuffer byteBuffer = ByteBuffer.allocate(0);
+//                        byte[] m = byteBuffer.array();
+//                        System.out.println("Size"+ readMsg.getSize());
+//                        udpMessageRead serverAnswer = new udpMessageRead("No-change",readMsg.getSize(),readMsg.getReadClientInt(),readMsg.getFd(),readMsg.getAttributes());
+//                        sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
+//                        numReplys++;
+//                        continue;
+//                    }
 
                     filesInServer.get(check).setTime(currentTimeInSeconds());
                     FileChannel currentChannel = filesInServer.get(check).getFd();
@@ -260,19 +255,21 @@ public class NfsServer {
 
                     readMsg.getFd().setPosFromStart(currentChannel.position());
 
-                    fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize(),readMsg.getAttributes().getFlags(),filesInServer.get(check).file.lastModified());
+                    fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize(),readMsg.getAttributes().getFlags());
+                    attributes.setModificationTime(filesInServer.get(check).file.lastModified());
 
                     System.out.println("SIZE 1 " + "Read".length());
                     System.out.println("SIZE 2 " + getObjectSize(readMsg.getReadClientInt()));
                     System.out.println("SIZE 3 " + s);
                     System.out.println("SIZE 4 " + getObjectSize(readMsg.getFd()));
                     System.out.println("SIZE 5 " + getObjectSize(attributes));
-                    System.out.println("SIZE 6 " + filesInServer.get(check).getFile().lastModified());
+                    System.out.println("SIZE 6 " + attributes.getModificationTime());
                     udpMessageRead serverAnswer = new udpMessageRead("Read",m,readMsg.getReadClientInt(),readMsg.getFd(),attributes);
 
                    System.out.println("read size"+ getObjectSize(serverAnswer));
 
                    sendUdpMessage(serverAnswer,packet.getAddress(),packet.getPort());
+                   numReplys++;
                 }
                 else if(type.equals("Write")){
                     System.out.println("New write request to Server");
@@ -288,6 +285,7 @@ public class NfsServer {
                         System.out.println("MPHKA EDW write");
                         udpMessageDontKnowThisID answer = new udpMessageDontKnowThisID(NO_THIS_ID_WRITE,type,writeΜsg.getFd(),writeΜsg.getWriteClientInt());
                         sendUdpMessage(answer,packet.getAddress(),packet.getPort());
+                        numReplys++;
                         continue;
                     }
 
@@ -317,6 +315,7 @@ public class NfsServer {
                     System.out.println("writeMsgPos"+writeΜsg.getFd().getPosFromStart());
                     udpMessageWrite retMsg = new udpMessageWrite("Write",writeΜsg.getWriteClientInt(),writeΜsg.getFd(),writeΜsg.getAttributes());
                     sendUdpMessage(retMsg,packet.getAddress(),packet.getPort());
+                    numReplys++;
                 }
 
             } catch (UnknownHostException e) {
@@ -520,7 +519,6 @@ public class NfsServer {
                         }
                     }
                 }
-
 //                nextId = returnIdFile(fds, openMsg);
 //
 //                if(nextId == -1){
@@ -565,6 +563,7 @@ public class NfsServer {
                     }
                 }
                 else {
+                    System.out.println("mphka edw edw");
                     nextId = returnIdFile(fds, openMsg);
                     if(nextId == -1){
                         nextId = lastID + 1;
