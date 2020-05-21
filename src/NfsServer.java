@@ -24,10 +24,14 @@ public class NfsServer {
     public static final int O_WRONLY = 6; // WRITE only permission
     public static final int E_EXIST = -1; //error if file exists with O_EXCl
     public  static final int ERROR = -2;
+    public static final String RESET = "\033[0m";  // Text Reset
+
     public  static int MAX_NUM_OF_FD = 5;
     public static final String NO_THIS_ID_READ = "DONT_KNOW_THIS_ID_READ";
     public static final String NO_THIS_ID_WRITE = "DONT_KNOW_THIS_ID_WRITE";
     public static int numOfFds = 0;
+    public static final String RED_BOLD = "\033[1;31m";    // RED
+    public static final String GREEN_BOLD = "\033[1;32m";  // GREEN
     public  static final int MAX_UDP_PACKET_SIZE = 1500;
 
     public static int numReplys = 0;
@@ -73,17 +77,8 @@ public class NfsServer {
             e.printStackTrace();
         }
 
-        //with this way all files will take
-
         try {
-            System.out.println(InetAddress.getLocalHost());
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
-//        serverSocket = null;
-
-        try {
-            serverSocket = new DatagramSocket(4002);
+            serverSocket = new DatagramSocket(4001);
             System.out.println("Ip: "+ serverSocket.getLocalAddress() +" Port: "+serverSocket.getLocalPort());
         } catch (SocketException e) {
             e.printStackTrace();
@@ -99,8 +94,8 @@ public class NfsServer {
                 byte[] buffer = new byte[MAX_UDP_PACKET_SIZE];
                 System.out.println(serverSocket.getLocalAddress());
                 packet = new DatagramPacket(buffer, buffer.length, serverSocket.getInetAddress(), serverSocket.getLocalPort());
-                System.out.println("Paw ston server gia receive");
-                System.out.println("Num of replys send by server :"+ numReplys);
+                System.out.println("Trying to receive next Packet");
+                System.out.println("Num of replies send by server :"+ numReplys);
                 serverSocket.receive(packet);
 
                 System.out.println(packet.getLength());
@@ -134,12 +129,8 @@ public class NfsServer {
                         }
                     }
 
-                    System.out.println("EXISTTTTTT"+exist);
-                    System.out.println("num of descriptors"+numOfFds);
-
                     if(exist == -1){
                         //check delete fileDescriptor
-                        System.out.println("num of descriptors"+numOfFds);
                         replaceFileDescriptor(filesInServer);
                     }
 
@@ -148,19 +139,19 @@ public class NfsServer {
 
                     int nextId = -1;
 
-                    System.out.println("flags"+openMsg.getFlags());
+//                    System.out.println("flags"+openMsg.getFlags());
                     nextId =  fillAccessMode(openMsg,filesInServer,newFile,ids);
 
-                    System.out.println("nextID" + nextId);
+//                    System.out.println("nextID" + nextId);
 
                     fileID newfd =  existedID(nextId,filesInServer);
 
 //                    fileDescriptor fd = new fileDescriptor(newfd,openMsg.getOpenClientInt(),openMsg.getFiled().getPosFromStart());
                     openMsg.getFiled().setFd(newfd);
                     ArrayList<Integer>flags = takeFlags(newFile);
-                    System.out.println("SIZE" + newFile.length());
+//                    System.out.println("SIZE" + newFile.length());
                     fileAttributes attributes = new fileAttributes(newFile.length(),flags);
-                    System.out.println("modification time" + newFile.lastModified());
+//                    System.out.println("modification time" + newFile.lastModified());
 
                     if(nextId > ids) {
                         //NEW ADDITION OF A FILE DESCRIPTOR
@@ -202,7 +193,7 @@ public class NfsServer {
 
                     if(check == null){
                         //return that it must opened again//we dont know this fileId
-                        System.out.println("MPHKA EDW read");
+//                        System.out.println("MPHKA EDW read");
                         udpMessageDontKnowThisID answer = new udpMessageDontKnowThisID(NO_THIS_ID_READ,type,readMsg.getFd(),readMsg.getReadClientInt());
                         sendUdpMessage(answer,packet.getAddress(),packet.getPort());
                         continue;
@@ -234,20 +225,20 @@ public class NfsServer {
                         size = (int)readMsg.getSize();
                     }
 
-                    System.out.println("SIze"+ size);
+                    System.out.println("Read request size: "+ size);
                     ByteBuffer byteBuffer = ByteBuffer.allocate(size);
 
                     long read = currentChannel.read(new ByteBuffer[]{byteBuffer});
 
                     if (read <= 0) {
-                        System.out.println("PROblem" + read);
+                        System.out.println("Problem" + read);
                     }
 
                     byte[] m = byteBuffer.array();
-                    System.out.println("SIze of bytearray"+ m.length);
+//                    System.out.println("SIze of bytearray"+ m.length);
                     String s = new String(byteBuffer.array(), StandardCharsets.UTF_8);
 
-                    System.out.println(s.length());
+//                    System.out.println(s.length());
 
                     readMsg.getAttributes().setSize(filesInServer.get(check).getFile().length());
 //                   Msg msg = new Msg(s);
@@ -258,12 +249,12 @@ public class NfsServer {
                     fileAttributes attributes = new fileAttributes(readMsg.getAttributes().getSize(),readMsg.getAttributes().getFlags());
                     attributes.setModificationTime(filesInServer.get(check).file.lastModified());
 
-                    System.out.println("SIZE 1 " + "Read".length());
-                    System.out.println("SIZE 2 " + getObjectSize(readMsg.getReadClientInt()));
-                    System.out.println("SIZE 3 " + s);
-                    System.out.println("SIZE 4 " + getObjectSize(readMsg.getFd()));
-                    System.out.println("SIZE 5 " + getObjectSize(attributes));
-                    System.out.println("SIZE 6 " + attributes.getModificationTime());
+//                    System.out.println("SIZE 1 " + "Read".length());
+//                    System.out.println("SIZE 2 " + getObjectSize(readMsg.getReadClientInt()));
+//                    System.out.println("SIZE 3 " + s);
+//                    System.out.println("SIZE 4 " + getObjectSize(readMsg.getFd()));
+//                    System.out.println("SIZE 5 " + getObjectSize(attributes));
+//                    System.out.println("SIZE 6 " + attributes.getModificationTime());
                     udpMessageRead serverAnswer = new udpMessageRead("Read",m,readMsg.getReadClientInt(),readMsg.getFd(),attributes);
 
                    System.out.println("read size"+ getObjectSize(serverAnswer));
@@ -276,13 +267,13 @@ public class NfsServer {
 //
                     udpMessageWrite writeΜsg = (udpMessageWrite) receiveMessage;
                     fileID check = null;
-                    System.out.println("writeMsgPos"+writeΜsg.getFd().getPosFromStart());
+                    System.out.println("writeMsgPos "+writeΜsg.getFd().getPosFromStart());
 
                     check = existFileId(filesInServer,writeΜsg.getFd().getFd());
 
                     if(check == null){
                         //return that it must opened again//we dont know this fileId
-                        System.out.println("MPHKA EDW write");
+//                        System.out.println("MPHKA EDW write");
                         udpMessageDontKnowThisID answer = new udpMessageDontKnowThisID(NO_THIS_ID_WRITE,type,writeΜsg.getFd(),writeΜsg.getWriteClientInt());
                         sendUdpMessage(answer,packet.getAddress(),packet.getPort());
                         numReplys++;
@@ -463,7 +454,6 @@ public class NfsServer {
                         }
                     } else if (openMsg.getFlags().contains(O_WRONLY)) {
                         if (newFile.canWrite()) {
-                            System.out.println("mphka");
                             nextId = returnIdFile(fds, openMsg);
                             if(nextId ==-1){
                                 nextId = lastID + 1;
@@ -472,7 +462,6 @@ public class NfsServer {
                             return nextId;
                         }
                         else {
-                            System.out.println("mphka error");
                             return ERROR;
                         }
                     } else if (openMsg.getFlags().contains(O_RDWR)) {
@@ -519,15 +508,7 @@ public class NfsServer {
                         }
                     }
                 }
-//                nextId = returnIdFile(fds, openMsg);
-//
-//                if(nextId == -1){
-//                    nextId = lastID + 1;
-//                    return  nextId;
-//                }
-//                else {
-//                    return nextId;
-//                }
+
                 if (openMsg.getFlags().contains(O_RDONLY)) {
                     if (newFile.canRead()) {
                         nextId = returnIdFile(fds, openMsg);
@@ -563,7 +544,6 @@ public class NfsServer {
                     }
                 }
                 else {
-                    System.out.println("mphka edw edw");
                     nextId = returnIdFile(fds, openMsg);
                     if(nextId == -1){
                         nextId = lastID + 1;
@@ -635,10 +615,13 @@ public class NfsServer {
 
         for(fileID temp : keys){
             serversFdsInfo curr = filesInServer.get(temp);
-            System.out.println("Filename: "+ curr.getFile().getName());
-            System.out.println("Time: "+ curr.getTime());
-            System.out.println("File Descriptor: "+ curr.getFd());
-            System.out.println("KEY id: "+ temp.getFd() +" Session : "+temp.getSession());
+            System.out.println( RED_BOLD +"====================");
+            System.out.println(GREEN_BOLD +"|| Filename: "+ curr.getFile().getName() +" ||");
+            System.out.println(RED_BOLD +"====================");
+            System.out.println(GREEN_BOLD +"Modification Time: "+ curr.getTime());
+            System.out.println(GREEN_BOLD +"File Descriptor: "+ curr.getFd());
+            System.out.println(GREEN_BOLD +"KEY id: "+ temp.getFd() +" Session : "+temp.getSession());
+            System.out.print(RESET);
         }
     }
     public static int canServer(udpMessageOpen openMsg,int ids,InetAddress ip ,int port){

@@ -1,5 +1,11 @@
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Array;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class Application {
@@ -15,15 +21,12 @@ public class Application {
     public static HashMap<Integer,String> appfds = new HashMap<>();
     public  static Scanner in = new Scanner(System.in);
     public static NfsClient client = new NfsClient();
-    public static final int BLOCKSIZE =500;//839 max
-    public static final int NUM_BLOCKS = 4;
+    public static final int BLOCKSIZE =800;//839 max
+    public static final int NUM_BLOCKS = 2;
     public static final int freshT = 10;
     public static void main(String[] args) {
-//        NfsClient client = new NfsClient();
-//        EnumSet<Flag> flag = null;
 
-
-        client.myNfs_init("192.168.2.2",4002,NUM_BLOCKS,BLOCKSIZE,freshT);
+        client.myNfs_init("192.168.2.5",4001,NUM_BLOCKS,BLOCKSIZE,freshT);
 
 //        Scanner in = new Scanner(System.in);
 //        HashMap<Integer,String> appfds = new HashMap<>();
@@ -80,13 +83,8 @@ public class Application {
                         System.err.println(RED + "Read returned an error");
                         break;
                     }
-                    System.out.println("STO APPLICATION :"+new String(check.getMsg(), StandardCharsets.UTF_8));
+                    System.out.println("APPLICATION :"+new String(check.getMsg(), StandardCharsets.UTF_8));
 
-                    int writeInt = write(check);
-
-                    if(writeInt < 0 ){
-                        System.err.println(RED + "Write returned an error");
-                    }
                     break;
                 case 3:
                     int fdWrite = -1;
@@ -136,6 +134,7 @@ public class Application {
                     }
                     break;
                 case 5:
+
                     int fdclose = -1;
                     while(true){
                         System.out.println(RED_BOLD + "Choose File descriptor");
@@ -149,8 +148,13 @@ public class Application {
                         break;
                     }
                     int close = client.myNfs_close(fdclose);
+
                     if(close < 0){
                         System.err.println("Error with close");
+                        break;
+                    }
+                    else{
+                        appfds.remove(fdclose);
                     }
                     break;
                 case 6:
@@ -174,17 +178,18 @@ public class Application {
                         Msg msg = new Msg(bytesMsg);
 
                         read7 = client.myNfs_read(fd71,msg, bytes);
-                        System.out.println("Bytes"+ msg.getMsg().length);
+
+                        System.out.println("Bytes read"+ msg.getMsg().length);
 //                        counter++;
                         if(msg.getMsg().length == 0){
                             break;
                         }
+//                        System.out.print("Paw gia write");
                         write = client.myNfs_write(fd72,msg,msg.getMsg().length);
 
                         System.out.println("Bytes Write" + msg.getMsg().length);
                     }
 
-//                    System.out.println("read counter"+counter);
                     break;
                 case 8:
                     System.out.print("Bytes read per Read request :");
@@ -202,21 +207,62 @@ public class Application {
                         int read8 =0;
                         counter++;
                         read8 = client.myNfs_read(fd8,msg, bytesRead);
-                        System.out.println("Bytes"+ msg.getMsg().length);
+                        System.out.println("Bytes read"+ read8);
 
                         if(msg.getMsg().length == 0){
+                            break;
+                        }
+                        if(read8 == 0){
                             break;
                         }
                     }
                     System.out.println("read counter"+counter);
 
                     break;
+                case 9:
+                    System.out.print("Bytes:");
+                    int bytes9 = in.nextInt();
+                    printfds(appfds);
+                    System.out.print("Give Write fd");
+                    int write9 = in.nextInt();
+                    System.out.println("Name of the file we want to write:" );
+                    String file = in.next();
+                    File newFile = new File("/home/aggenikos/katanemhmena/NetworkFileSystem/src/ServerDirectory/"+ file);
+
+                    try {
+                        FileChannel fdnew = FileChannel.open(Paths.get(newFile.getPath()));
+                        while (true){
+                            ByteBuffer byteBuffer = ByteBuffer.allocate(bytes9);
+                            int read9 = fdnew.read(byteBuffer);
+
+                            if(read9 <=0){
+                                break;
+                            }
+                            System.out.println("SIZE"+ read9);
+                            Msg msg = new Msg(Arrays.copyOfRange(byteBuffer.array(),0,read9));
+
+
+                            int ret = client.myNfs_write(write9,msg,read9);
+                            System.out.println("Bytes write"+ ret);
+
+                            if(ret < 0){
+                                System.out.println("ERROR");
+                                break;
+                            }
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+
+
+                    break;
                 case 10:
                     System.out.println("Requests" + client.requestsSend);
+                    client.requestsSend =0;
                     break;
                 case 11:
                     System.out.println("data" + client.data_size);
-                    System.out.println("times"+ client.times);
+                    client.data_size =0;
                     break;
             }
 
