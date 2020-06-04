@@ -22,3 +22,5 @@ System Architecture Image
 - **Compile**: javac Application.java
 - **Change** Server Ip:Port inside Application.java
 - **Run**: java Application
+### Cache-Memory
+- You can change **size** of a **block** and **number** of blocks inside Application.java 
